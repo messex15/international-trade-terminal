@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Bell, BriefcaseBusiness, Building2, CalendarDays, CheckSquare2, ChevronRight, CircleHelp, ContactRound, FileText, Filter, FolderOpen, Globe2, Handshake, LayoutDashboard, LineChart, MapPin, Menu, Network, PackageSearch, Plus, Search, Settings, Target, Truck, UserCircle2, Users, Wheat, X } from 'lucide-react';
+import { BarChart3, Bell, BriefcaseBusiness, Building2, CalendarDays, CheckSquare2, ChevronRight, CircleHelp, ContactRound, FileText, Filter, FolderOpen, Globe2, Handshake, LayoutDashboard, LineChart, MapPin, Menu, Network, PackageSearch, Plus, Search, Settings, Target, Truck, UserCircle2, Users, Wheat, X, LogOut } from 'lucide-react';
 import { pageDefinitions, businessUnits } from './data/demoData.js';
+import { logout } from '@netlify/identity';
 const navGroups = [
     ['Command Centre', [
             ['Dashboard', LayoutDashboard], ['Opportunities', Target], ['Projects', BriefcaseBusiness]
@@ -39,8 +40,17 @@ function badgeClass(value = '') {
 function getDisplayName(record) {
     return record.name || record.company || record.task || record.title || record.lead || record.commodity || record.report || record.setting || record.resource || record.field || 'Record';
 }
+function initialPageFromHash() {
+    if (!location.hash || location.hash === '#') return 'Dashboard';
+    try {
+        const decoded = decodeURIComponent(location.hash.slice(1));
+        return decoded === 'Dashboard' || pageDefinitions[decoded] ? decoded : 'Dashboard';
+    } catch {
+        return 'Dashboard';
+    }
+}
 function App() {
-    const [active, setActive] = useState(() => decodeURIComponent(location.hash.slice(1)) || 'Dashboard');
+    const [active, setActive] = useState(initialPageFromHash);
     const [business, setBusiness] = useState('All Businesses');
     const [records, setRecords] = useState(() => {
         const saved = localStorage.getItem('ainu-demo-records-v2');
@@ -70,9 +80,12 @@ function App() {
     }, [active]);
     useEffect(() => {
         const onHash = () => {
-            const next = decodeURIComponent(location.hash.slice(1));
-            if (next && (next === 'Dashboard' || pageDefinitions[next]))
-                setActive(next);
+            try {
+                const next = decodeURIComponent(location.hash.slice(1));
+                if (next && (next === 'Dashboard' || pageDefinitions[next])) setActive(next);
+            } catch {
+                setActive('Dashboard');
+            }
         };
         window.addEventListener('hashchange', onHash);
         return () => window.removeEventListener('hashchange', onHash);
@@ -144,6 +157,14 @@ function Sidebar({ active, onChange, business, setBusiness, open, onClose, onQui
                 React.createElement("small", null, "Internal prototype \u00B7 2026"))));
 }
 function Topbar({ business, setBusiness, globalQuery, setGlobalQuery, results, onSelectResult, onMenu, onToast }) {
+    const signOut = async () => {
+        try {
+            await logout();
+        }
+        finally {
+            window.location.assign('/login.html');
+        }
+    };
     return React.createElement("header", { className: "topbar" },
         React.createElement("button", { className: "menuButton", onClick: onMenu, "aria-label": "Open navigation" },
             React.createElement(Menu, { size: 20 })),
@@ -165,10 +186,12 @@ function Topbar({ business, setBusiness, globalQuery, setGlobalQuery, results, o
                 React.createElement(ChevronRight, { size: 14 }))) : React.createElement("div", { className: "emptySearch" }, "No matching records"))),
         React.createElement("button", { className: "iconButton", "aria-label": "Notifications", onClick: () => onToast('Notifications are demo-only in this prototype') },
             React.createElement(Bell, { size: 18 })),
+        React.createElement("button", { className: "iconButton logoutButton", "aria-label": "Log out", title: "Log out", onClick: signOut },
+            React.createElement(LogOut, { size: 18 })),
         React.createElement("div", { className: "userBlock" },
             React.createElement("div", { className: "avatar" }, "AA"),
             React.createElement("div", null,
-                React.createElement("b", null, "Ainu Azeem"),
+                React.createElement("b", null, "Ainu A."),
                 React.createElement("small", null, "Business Development"))));
 }
 function HeaderBlock({ title, subtitle, actionLabel = 'New Record', onAction, extra }) {

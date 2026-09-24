@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0d2238" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Sign in | AINU Business Command Centre</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17283b;background:#091827}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 72% 18%,#173b5f 0,#0d2238 34%,#081725 72%);padding:24px}.shell{width:min(430px,100%)}.brand{display:flex;align-items:center;gap:12px;color:#fff;margin:0 0 18px}.mark{width:48px;height:48px;border:1px solid rgba(212,162,58,.65);border-radius:12px;display:grid;place-items:center;color:#d4a23a;font-size:25px}.brand b{display:block;font-size:22px;letter-spacing:.16em}.brand small{display:block;color:#9eb3c8;font-size:9px;letter-spacing:.14em;margin-top:4px}.card{background:#fff;border-radius:15px;box-shadow:0 28px 70px rgba(0,0,0,.3);padding:30px}.card h1{font-size:23px;margin:0;color:#17283b}.card>p{color:#718096;font-size:12px;line-height:1.55;margin:8px 0 23px}.field{display:block;margin:0 0 14px;font-size:10px;font-weight:800;color:#4d6175;text-transform:uppercase;letter-spacing:.06em}.field input{display:block;width:100%;margin-top:6px;padding:12px 13px;border:1px solid #dce4ec;border-radius:8px;background:#f9fbfd;color:#17283b;font-size:13px;outline:none}.field input:focus{border-color:#5d86aa;box-shadow:0 0 0 3px rgba(60,112,158,.12)}button{width:100%;border:0;border-radius:8px;padding:12px;background:#173b5f;color:#fff;font-size:12px;font-weight:800;cursor:pointer}button:hover{background:#102f4d}button:disabled{opacity:.6;cursor:wait}.msg{display:none;margin:14px 0 0;padding:10px 11px;border-radius:7px;font-size:11px;line-height:1.45}.msg.show{display:block}.msg.error{background:#fdeceb;color:#9f443c;border:1px solid #f3cbc7}.msg.ok{background:#eaf5ec;color:#397147;border:1px solid #cfe5d4}.msg.info{background:#edf4fa;color:#385d7c;border:1px solid #d2e1ed}.foot{color:#7990a7;text-align:center;font-size:10px;line-height:1.5;margin-top:16px}.secure{display:flex;gap:7px;align-items:center;justify-content:center;color:#a7b9ca;font-size:9px;margin-top:12px}.secure:before{content:"";width:7px;height:7px;border-radius:50%;background:#58a36c;box-shadow:0 0 0 3px rgba(88,163,108,.14)}.hidden{display:none!important}.passwordHelp{font-size:10px;color:#8797a7;margin:-5px 0 14px;line-height:1.45}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><div class="mark">◎</div><div><b>AINU</b><small>BUSINESS COMMAND CENTRE</small></div></div>
+  <main class="card">
+    <h1 id="heading">Authorized access</h1>
+    <p id="intro">Sign in with the email address that was invited to the internal business portal.</p>
+
+    <form id="loginForm">
+      <label class="field">Email<input id="email" type="email" autocomplete="username" required /></label>
+      <label class="field">Password<input id="password" type="password" autocomplete="current-password" required /></label>
+      <button id="submit" type="submit">Sign in</button>
+    </form>
+
+    <form id="inviteForm" class="hidden">
+      <label class="field">Create password<input id="invitePassword" type="password" autocomplete="new-password" minlength="8" required /></label>
+      <label class="field">Confirm password<input id="inviteConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>
+      <div class="passwordHelp">Use at least 8 characters. This becomes the password for the invited account.</div>
+      <button id="acceptButton" type="submit">Activate account</button>
+    </form>
+
+    <form id="recoveryForm" class="hidden">
+      <label class="field">New password<input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
+      <label class="field">Confirm password<input id="recoveryConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>
+      <button id="recoveryButton" type="submit">Set new password</button>
+    </form>
+
+    <div id="message" class="msg" role="status" aria-live="polite"></div>
+  </main>
+  <div class="secure">Invite-only access · Authentication provided by Netlify Identity</div>
+  <div class="foot">Need access? Contact the portal administrator. Public registration is disabled.</div>
+</div>
+<script type="module">
+import { getUser, login, handleAuthCallback, acceptInvite, updateUser, logout } from 'https://esm.sh/@netlify/identity';
+
+const loginForm = document.getElementById('loginForm');
+const inviteForm = document.getElementById('inviteForm');
+const recoveryForm = document.getElementById('recoveryForm');
+const email = document.getElementById('email');
+const password = document.getElementById('password');
+const submit = document.getElementById('submit');
+const invitePassword = document.getElementById('invitePassword');
+const inviteConfirm = document.getElementById('inviteConfirm');
+const acceptButton = document.getElementById('acceptButton');
+const recoveryPassword = document.getElementById('recoveryPassword');
+const recoveryConfirm = document.getElementById('recoveryConfirm');
+const recoveryButton = document.getElementById('recoveryButton');
+const heading = document.getElementById('heading');
+const intro = document.getElementById('intro');
+const message = document.getElementById('message');
+let inviteToken = null;
+
+function show(text, type='error'){
+  message.textContent = text;
+  message.className = `msg show ${type}`;
+}
+function hideForms(){ loginForm.classList.add('hidden'); inviteForm.classList.add('hidden'); recoveryForm.classList.add('hidden'); }
+function hasMemberRole(user){ return Boolean(user && (user.roles?.includes?.('member') || user.app_metadata?.roles?.includes?.('member'))); }
+async function openPortal(user){
+  if (!hasMemberRole(user)) {
+    show('Your account is authenticated, but it does not have the “member” role yet. In Netlify, open Identity → Users → this user, add the role member, then sign out and sign back in.', 'info');
+    return false;
+  }
+  location.replace('/app/#Dashboard');
+  return true;
+}
+
+async function boot(){
+  if (new URLSearchParams(location.search).get('role') === 'missing') {
+    show('This account is signed in but still needs the member role in Netlify Identity.', 'info');
+  }
+  try {
+    const callback = await handleAuthCallback();
+    if (callback?.type === 'invite' && callback.token) {
+      inviteToken = callback.token;
+      hideForms(); inviteForm.classList.remove('hidden');
+      heading.textContent = 'Activate your account';
+      intro.textContent = 'Your invitation is valid. Create a password to finish setting up this portal account.';
+      return;
+    }
+    if (callback?.type === 'recovery') {
+      hideForms(); recoveryForm.classList.remove('hidden');
+      heading.textContent = 'Choose a new password';
+      intro.textContent = 'Enter a new password for your portal account.';
+      return;
+    }
+    if (callback?.user) {
+      await openPortal(callback.user);
+      return;
+    }
+    const user = await getUser();
+    if (user) await openPortal(user);
+  } catch (err) {
+    show(err?.message || 'The authentication link could not be completed. Ask the administrator for a new invitation.');
+  }
+}
+
+loginForm.addEventListener('submit', async (event) => {
+  event.preventDefault(); submit.disabled = true; submit.textContent = 'Signing in…'; message.className = 'msg';
+  try {
+    const user = await login(email.value.trim(), password.value);
+    if (!(await openPortal(user))) { await logout(); }
+  } catch (err) {
+    show(err?.message || 'Sign-in failed. Check your email and password.');
+  } finally {
+    submit.disabled = false; submit.textContent = 'Sign in';
+  }
+});
+
+inviteForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!inviteToken) return show('The invitation token is missing. Ask the administrator to resend the invitation.');
+  if (invitePassword.value !== inviteConfirm.value) return show('The passwords do not match.');
+  acceptButton.disabled = true; acceptButton.textContent = 'Activating…';
+  try {
+    const user = await acceptInvite(inviteToken, invitePassword.value);
+    show('Account activated. Checking portal access…','ok');
+    if (!(await openPortal(user))) { /* stay signed in so admin can assign role; next login refreshes claims */ }
+  } catch (err) {
+    show(err?.message || 'The invitation could not be accepted. It may have expired.');
+  } finally {
+    acceptButton.disabled = false; acceptButton.textContent = 'Activate account';
+  }
+});
+
+recoveryForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (recoveryPassword.value !== recoveryConfirm.value) return show('The passwords do not match.');
+  recoveryButton.disabled = true; recoveryButton.textContent = 'Saving…';
+  try {
+    const user = await updateUser({ password: recoveryPassword.value });
+    show('Password updated. Opening the portal…','ok');
+    await openPortal(user);
+  } catch (err) {
+    show(err?.message || 'The password could not be updated.');
+  } finally {
+    recoveryButton.disabled = false; recoveryButton.textContent = 'Set new password';
+  }
+});
+
+boot();
+</script>
+</body>
+</html>

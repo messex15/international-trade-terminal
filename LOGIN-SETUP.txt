@@ -1,0 +1,33 @@
+AINU Business Command Centre — LOGIN FIX
+
+WHY THE WHITE SCREEN HAPPENED
+1. Netlify invite links land at the project root with #invite_token=...
+2. The previous root was protected before the invited user had a session.
+3. The React router treated any hash, including invite_token, as a page name and could crash.
+4. Invite acceptance requires the user to create a password with acceptInvite().
+
+NEW FLOW
+/                  Public auth router only. Contains no business data.
+/login             Public sign-in / invite activation / recovery page.
+/app/              Protected portal. Requires Netlify Identity role: member.
+/src/*              Protected application JavaScript and demo data.
+/styles.css         Protected application stylesheet.
+
+NETLIFY SETTINGS
+- Identity: Enabled
+- Registration preferences: Invite only
+- Every authorized Identity user must have role: member
+- If you add/change the role, the user should sign out and sign in again.
+
+INVITE TEST
+1. Invite a fresh email from Netlify Identity.
+2. Before or after acceptance, give that user the role member.
+3. Click Accept invite in the email.
+4. The site should show "Activate your account" and ask for a password.
+5. After activation, the portal should open at /app/#Dashboard.
+
+NAVIGATION TESTED IN SOURCE
+Dashboard; Opportunities; Projects; Companies; Buyers; Suppliers; Contacts;
+Commodities; Trade Leads; Market Intelligence; Tasks & Follow-ups; Meetings;
+Documents; Reports; Partners & Referrals; Settings; Profile; Help & Support.
+All sidebar entries match pageDefinitions. Unknown/malformed hashes now fall back to Dashboard.

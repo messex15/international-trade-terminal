@@ -1,1 +1,17 @@
-/* /index.html 200
+# Public authentication pages
+/login /login.html 200
+/login.html /login.html 200
+
+# Protected application shell
+/app /app/index.html 200! Role=member
+/app/ /app/index.html 200! Role=member
+/app/* /app/index.html 200! Role=member
+/app /login 401!
+/app/ /login 401!
+/app/* /login 401!
+
+# Protect application source and data from unauthenticated requests
+/src/* /src/:splat 200! Role=member
+/src/* /login 401!
+/styles.css /styles.css 200! Role=member
+/styles.css /login 401!
