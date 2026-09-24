@@ -1,0 +1,53 @@
+AINU BUSINESS COMMAND CENTRE
+PRIVACY NOTICE
+
+Last updated: September 23, 2026
+
+1. PURPOSE
+This website is an internal, access-controlled business portal. The login page may be
+publicly reachable, but application content is intended only for authorized users.
+
+2. ACCESS
+User registration is intended to be invite-only. Access to the protected application
+requires an authorized Netlify Identity account and the required application role
+(currently "member").
+
+3. AUTHENTICATION DATA
+Authentication is handled by Netlify Identity. The application itself is not intended
+to store users' plaintext passwords in the repository or application data files.
+Netlify may process authentication and operational information in accordance with its
+own service terms and privacy practices.
+
+4. BROWSER-STORED PORTAL DATA
+The current prototype can store records created through the interface in the user's
+browser using localStorage, including the key:
+    ainu-demo-records-v2
+
+This browser storage is local to that browser/device and is not a shared business
+database. Clearing browser storage may remove locally added prototype records.
+
+5. THIRD-PARTY NETWORK REQUESTS
+The current build loads software modules through esm.sh, including React, React DOM,
+Lucide React, and @netlify/identity. Requests to those services, as well as normal
+hosting requests to Netlify, may generate operational logs handled by those providers.
+
+6. ANALYTICS AND ADVERTISING
+The application code does not intentionally include advertising, behavioral advertising,
+or a dedicated analytics/tracking product. Hosting and authentication providers may
+still maintain operational, security, or access logs as part of their services.
+
+7. CONFIDENTIAL BUSINESS INFORMATION
+This portal is currently a prototype. Do not use the prototype as the sole repository
+for highly confidential business records, banking information, proof-of-funds documents,
+identity documents, passwords, or other sensitive information until production-grade
+server-side storage, access controls, audit logging, backup, retention, and recovery
+controls are implemented.
+
+8. SEARCH ENGINES
+The project includes robots.txt requesting that search engines not crawl or index any
+part of the site. robots.txt is a crawler instruction only and is not an access-control
+or security mechanism.
+
+9. CONTACT
+Questions about access, privacy, or removal of portal information should be directed to
+the administrator of the AINU Business Command Centre.
