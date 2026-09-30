@@ -1,0 +1,145 @@
+/* Freight Desk additions.
+   Everything else comes from the portal's styles.css (pageHead, card, toolbar,
+   tableWrap, badge, formGrid, overlay, drawer, modal, toast). Colours and
+   sizes below reuse the portal palette: navy #0d2238, gold #d4a23a, the
+   notice creams, and the success/error tints from login.html. */
+
+.fd{min-width:0}
+.fd .tableWrap{position:relative}
+
+/* ---------- Section tabs (echo the sidebar's gold active marker) ---------- */
+.fdTabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:-6px 0 16px;overflow-x:auto;scrollbar-width:none}
+.fdTabs button{border:0;background:transparent;color:#64758a;display:inline-flex;align-items:center;gap:7px;padding:10px 12px;font-size:12px;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;border-radius:8px 8px 0 0}
+.fdTabs button:hover{color:#16263a;background:#eef3f8}
+.fdTabs button.active{color:#16263a;border-bottom-color:var(--gold)}
+.fdCount{background:#edf3f8;color:#4d667b;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800}
+.fdTabs button.active .fdCount{background:#d9a542;color:#0e2032}
+
+/* ---------- Forms (portal .formGrid styles inputs; extend to selects) ---------- */
+.fd .formGrid.fdGrid3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.fd .card>.formGrid,.fd .card>form>.formGrid{padding-top:4px}
+.fd .formGrid select,.fd .formGrid textarea{width:100%;margin-top:5px;padding:9px 10px;border:1px solid #dce4ec;border-radius:7px;font-size:11px;color:#203448;background:#fff;font-family:inherit}
+.fd .formGrid textarea{resize:vertical;min-height:64px}
+.fd .formGrid input:disabled,.fd .formGrid select:disabled{background:#f3f6fa;color:#8190a0}
+.fdSpan2{grid-column:1/-1}
+.fdHint{display:block;font-weight:400;color:#8797a7;font-size:9px;margin-top:4px;line-height:1.4}
+.fdCombo{display:flex;margin-top:5px}
+.fd .fdCombo input{margin-top:0;min-width:0;border-top-right-radius:0;border-bottom-right-radius:0}
+.fd .fdCombo select{margin-top:0;width:auto;flex:0 0 auto;border-left:0;border-top-left-radius:0;border-bottom-left-radius:0;background:#f8fafc}
+.fd .fdCombo .secondary{flex:0 0 auto;border-radius:0 7px 7px 0;border-left:0;padding:0 10px}
+
+/* ---------- Tables ---------- */
+.fd .tableWrap td b{display:block;font-size:10px;color:#21354a}
+.fd .tableWrap td small{display:block;font-size:8px;color:#8a97a4;margin-top:3px}
+.fd .tableWrap th.fdNum,.fd .tableWrap td.fdNum{text-align:right}
+.fd .tableWrap td.fdWrap{white-space:normal;min-width:230px}
+.fd .tableWrap td.fdSource{min-width:170px;max-width:280px}
+.fd table.fdStatic tbody tr{cursor:default}
+.fd table.fdStatic tbody tr:hover{background:transparent}
+.fdSr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.fdUp{color:#a0473f;font-weight:800}
+.fdDown{color:#3f7649;font-weight:800}
+.fd .emptyState .primary{margin-top:6px}
+.fdToolbarTitle{font-size:12px;font-weight:700;color:#22364a}
+
+/* ---------- Landed cost layout ---------- */
+.fdCalc{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:15px;align-items:start}
+.fdCalcMain{display:flex;flex-direction:column;gap:15px;min-width:0}
+.fdCardFoot{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border-top:1px solid var(--line)}
+.fdFlags{list-style:none;margin:5px 0 0;padding:0}
+.fdFlags li{font-size:9px;color:#8a97a4;margin-top:3px;white-space:normal;line-height:1.45}
+.fdFlags li.warning{color:#9b6c17}
+.fdFlags li.error{color:#a0473f}
+.fdLinkButton{border:0;background:none;padding:0;margin-left:4px;color:#285f96;font-weight:700;font-size:inherit;text-decoration:underline;text-underline-offset:2px}
+.fdLineEdit{display:grid;grid-template-columns:1.1fr 1.5fr .9fr .7fr 1.1fr .9fr;gap:6px;margin-bottom:4px}
+.fdLineEdit input,.fdLineEdit select{min-width:0;padding:7px 8px;border:1px solid #dce4ec;border-radius:7px;font-size:10px;color:#203448;background:#fff}
+
+/* ---------- Quote summary ---------- */
+.fdSummary{position:sticky;top:84px;border-top:3px solid var(--gold)}
+.fd[data-variant="standalone"] .fdSummary{top:16px}
+.fdSummaryEmpty{margin:0;padding:0 17px 8px;color:#758398;font-size:11px;line-height:1.55}
+.fdRows{padding:0 17px}
+.fdRow{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #edf1f5;padding:9px 0;font-size:10px}
+.fdRows .fdRow:first-child{border-top:0}
+.fdRow span{color:#66778a}
+.fdRow b{color:#253b51;text-align:right;white-space:nowrap}
+.fdRow.total{border-top-color:#dfe6ef}
+.fdRow.total span,.fdRow.total b{color:#16263a;font-weight:800;font-size:11px}
+.fdFigure{margin:8px 17px 8px;padding:13px 14px;border-radius:9px;background:#f7f9fb;border:1px solid #e5ebf1;border-left:3px solid var(--gold)}
+.fdFigure small{display:block;font-size:10px;color:#76869a}
+.fdFigure strong{display:block;font-size:26px;line-height:1.15;color:#16263a;margin:3px 0 2px}
+.fdFigure strong span{font-size:11px;color:#76869a;font-weight:600}
+.fdFigure em{display:block;font-style:normal;font-size:10px;color:#758398}
+.fdVerdict{margin:10px 17px 0;padding:9px 11px;border-radius:7px;font-size:10px;font-weight:700;line-height:1.45;border:1px solid}
+.fdVerdict.good{background:#eaf5ec;color:#397147;border-color:#cfe5d4}
+.fdVerdict.warn{background:#fff8e7;color:#715d2e;border-color:#eedaa6}
+.fdVerdict.bad{background:#fdeceb;color:#9f443c;border-color:#f3cbc7}
+.fdHolds{margin:10px 17px 0;font-size:10px;color:#66778a;line-height:1.5}
+.fdHolds b{color:#253b51}
+.fdIssues{list-style:none;margin:12px 17px 0;padding:10px 11px;background:#fff8e7;border:1px solid #eedaa6;border-radius:8px}
+.fdIssues li{font-size:10px;color:#715d2e;line-height:1.45;padding-left:12px;position:relative}
+.fdIssues li+li{margin-top:6px}
+.fdIssues li:before{content:"";position:absolute;left:0;top:5px;width:5px;height:5px;border-radius:50%;background:var(--gold)}
+.fdIssues li.error{color:#9f443c}
+.fdIssues li.error:before{background:#c0564b}
+.fdSummaryActions{padding:14px 17px 0}
+.fdSummaryActions .primary{width:100%;justify-content:center;padding:11px}
+.fdFine{margin:10px 17px 16px;font-size:9px;color:#8797a7;line-height:1.5}
+
+/* ---------- Drawers, modals, access ---------- */
+.fdDrawerActions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.fdHistory{display:flex;flex-direction:column;margin-top:6px}
+.fdHistory>div{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid #edf1f5}
+.fdHistory>div:first-child{border-top:0}
+.fdHistory b{display:block;font-size:11px;color:#253b50}
+.fdHistory>div.current b{color:#234b6f}
+.fd .fdHistory small{display:block;font-size:9px;color:#8190a0;margin-top:2px;text-transform:none;letter-spacing:0}
+.fdHistoryEnd{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:10px;white-space:nowrap}
+.modal.fdWideModal{width:min(920px,96vw)}
+.modal.fd .toolbar{border-top:0}
+.modalNote.fdError{background:#fdeceb;border-color:#f3cbc7;color:#9f443c}
+.secondary.fdDanger{color:#a0473f}
+.secondary.fdDanger:hover{background:#fff1ef}
+.fd button:disabled{opacity:.55;cursor:not-allowed}
+.toast.fdToastBad{background:#9f443c}
+.fdAccessCard .modalActions{padding-top:0}
+.fdAccessCard+.card{margin-top:15px}
+.fdNewLink{margin:0 18px 18px;padding:12px;background:#f5f8fb;border:1px solid #e2e8ef;border-radius:8px}
+.fdNewLink .fdCombo{margin-top:0}
+.fdNewLink input{width:100%;padding:9px 10px;border:1px solid #dce4ec;border-radius:7px 0 0 7px;font-size:11px;color:#203448;background:#fff}
+.fdNewLink p{margin:8px 0 0;font-size:10px;color:#708092;line-height:1.5}
+
+/* ---------- Standalone client page (/freight/) ---------- */
+.fdBar{background:linear-gradient(90deg,var(--navy),#0a1a2b);color:#fff;display:flex;align-items:center;gap:16px;padding:12px 24px;flex-wrap:wrap}
+.fdBrand{display:flex;align-items:center;gap:10px}
+.fdBarTitle{color:#bdd0e2;font-size:12px;padding-left:16px;border-left:1px solid rgba(255,255,255,.12)}
+.fdWho{margin-left:auto;display:flex;align-items:center;gap:10px;color:#bdd0e2;font-size:11px;min-width:0}
+.fdWho>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fdWho button,.fdWho a{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid rgba(255,255,255,.12);background:#173b5f;color:#fff;border-radius:8px;font-size:11px;text-decoration:none;white-space:nowrap}
+.fdWho button:hover,.fdWho a:hover{background:#102f4d}
+
+/* ---------- Responsive ---------- */
+@media(max-width:1180px){.fdCalc{grid-template-columns:1fr}
+.fdSummary{position:static}
+}
+@media(max-width:900px){.fd .formGrid.fdGrid3{grid-template-columns:1fr 1fr}
+.fdLineEdit{grid-template-columns:1fr 1fr}
+}
+@media(max-width:620px){.fd .formGrid.fdGrid3{grid-template-columns:1fr}
+.fdTabs button{padding:9px 9px;font-size:11px}
+.fdFigure strong{font-size:22px}
+.fdBar{padding:10px 13px}
+.fdBarTitle{display:none}
+.fdNewLink{margin:0 12px 12px}
+}
+
+/* ---------- Print (only while the Freight Desk prints a quote) ---------- */
+@media print{body.fdPrinting{background:#fff}
+body.fdPrinting .sidebar,body.fdPrinting .topbar,body.fdPrinting .demoStrip,body.fdPrinting .scrim,body.fdPrinting .fdBar,body.fdPrinting .fdTabs,body.fdPrinting .headActions,body.fdPrinting .fdCardFoot,body.fdPrinting .fdSummaryActions,body.fdPrinting .toast,body.fdPrinting .fd .iconButton{display:none!important}
+body.fdPrinting .mainArea{margin-left:0!important}
+body.fdPrinting .contentArea{padding:0!important;max-width:none}
+body.fdPrinting .fdCalc{grid-template-columns:1fr 300px}
+body.fdPrinting .fdSummary{position:static}
+body.fdPrinting .card{box-shadow:none}
+body.fdPrinting .fd input,body.fdPrinting .fd select{border:0;background:transparent;padding-left:0}
+}

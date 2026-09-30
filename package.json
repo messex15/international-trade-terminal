@@ -1,0 +1,19 @@
+{
+  "name": "international-trade-terminal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AINU Business Command Centre. Static site plus Netlify functions for the Freight Desk.",
+  "scripts": {
+    "dev": "netlify dev",
+    "secrets": "node scripts/generate-secrets.mjs",
+    "portal-kit": "node scripts/build-portal-kit.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

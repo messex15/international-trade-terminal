@@ -9,3 +9,12 @@ Netlify manual deploy:
 4. Netlify will publish index.html directly.
 
 Important: this prototype loads React and Lucide modules from esm.sh at runtime. Keep confidential business data out until authentication and a secure backend are added.
+
+Freight Desk (added):
+The Freight Desk (/freight/ and Freight Desk in the portal sidebar) uses
+Netlify Functions, an Edge Function and Netlify Blobs. Drag-and-drop may not
+deploy those server parts, so deploy with the Netlify CLI or a Git-connected
+site instead:
+  npm install
+  npx netlify-cli deploy --prod
+Setup needs one environment variable (SESSION_SECRET). See FREIGHT-DESK.txt.

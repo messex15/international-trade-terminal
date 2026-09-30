@@ -1,3 +1,15 @@
+# Keep server code and tooling files off the public site
+/netlify/*          /404  404!
+/scripts/*          /404  404!
+/test/*             /404  404!
+/package.json       /404  404!
+/package-lock.json  /404  404!
+/netlify.toml       /404  404!
+/FREIGHT-DESK.txt   /404  404!
+
+# Freight Desk (/freight/*) is guarded by netlify/edge-functions/freight-gate.js,
+# which admits portal members and holders of a single-use client link.
+
 # Public authentication pages
 /login /login.html 200
 /login.html /login.html 200

@@ -1,0 +1,26 @@
+# Added for the Freight Desk. The rest of the site stays static and keeps its
+# routing and access rules in _redirects.
+
+[build]
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# The Freight Desk holds private business data: keep it out of search engines,
+# caches and other sites' frames.
+[[headers]]
+  for = "/freight/*"
+  [headers.values]
+    Cache-Control = "no-store"
+    X-Robots-Tag = "noindex, nofollow"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+
+[[headers]]
+  for = "/api/freight/*"
+  [headers.values]
+    Cache-Control = "no-store"
+    X-Robots-Tag = "noindex, nofollow"

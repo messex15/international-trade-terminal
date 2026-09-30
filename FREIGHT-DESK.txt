@@ -1,0 +1,87 @@
+AINU Business Command Centre - FREIGHT DESK
+
+WHAT IT IS
+A rate memory and landed cost calculator for trading.
+- Rate memory: capture every rail tariff, loading charge, port charge and
+  carrier offer as it arrives. Each lane (carrier, route, commodity, billing
+  basis) keeps its history and shows the % change between rates.
+- Landed cost: build a quote from those rates. Railcar, container and
+  truckload charges count whole units. USD converts at a typed rate or the
+  Bank of Canada daily rate. Shows the lowest price for the target margin,
+  the floor price, and whether an offered price meets target, clears the
+  floor, or loses money.
+- Margin protection: each line warns when its rate has expired, is older
+  than 30 days, is not in effect yet, or a newer rate is on file. A quote
+  "holds until" the first expiry among the rates it uses.
+- Saved quotes: the server recomputes totals and keeps a copy of the rates
+  used. Opening a saved quote re-checks it against today's rates.
+
+WHO CAN USE IT
+/app/#Freight Desk   Staff. Sidebar > Operations > Freight Desk. Uses the
+                     existing Netlify Identity sign-in and the member role.
+/freight/            Clients, through a single-use link. Same desk, on its
+                     own page, without the rest of the portal.
+Staff manage client links under Freight Desk > Client access.
+
+CLIENT LINKS
+1. Freight Desk > Client access > enter who it is for > Create link.
+2. Copy the link and send it to that person only. It works ONCE and expires
+   after 1 to 30 days if unopened.
+3. They open it and press "Open the Freight Desk". That signs in their
+   browser for 7, 30 or 90 days and uses up the link.
+4. Revoke ends their access on their next click.
+- The page asks for a button press on purpose: email security scanners
+  open links automatically, and would otherwise use them up.
+- One link = one person, one browser. For a second device, make a second link.
+- Only a fingerprint (SHA-256) of each link is stored, never the link.
+
+SETUP (once)
+1. Environment variable. In Netlify: Project configuration > Environment
+   variables, add SESSION_SECRET. Generate a value with:
+       npm install
+       npm run secrets
+   If Netlify asks for scopes, include Functions.
+2. Deploy with the Netlify CLI or a Git-connected site (not drag-and-drop):
+       npx netlify-cli deploy --prod
+   The functions, edge function and blob storage are set up automatically.
+3. Sign in to the portal as a member and open Freight Desk.
+
+WHERE THE DATA LIVES
+Netlify Blobs on this site: stores freight-access, freight-rates and
+freight-quotes. Browse them in Netlify under Data & Storage > Blobs. Writes
+use version checks so two people saving at once never overwrite each other.
+Site-wide Blobs default to Netlify's us-east-2 (Ohio) region; Netlify has no
+Canadian region.
+
+FILES
+freight/FreightDesk.js         The desk (React, same classes as the portal)
+freight/calc.js                Landed cost math, shared by browser and server
+freight/freight.css            Styles the portal has no equivalent for
+freight/portal-kit.css         Copy of the portal rules the client page needs,
+                               because /styles.css is members-only. After
+                               editing styles.css run: npm run portal-kit
+freight/index.html, main.js    The client page at /freight/
+freight/access/                Where client links land (styled like /login)
+netlify/edge-functions/        Gate for /freight/* (members or client links)
+netlify/functions/             APIs under /api/freight/*
+netlify/lib/                   Sessions, Identity check, validation
+_redirects                     Now also hides server files from the public site
+
+LOCAL TESTING
+    npm install
+    npm run secrets > .env
+    echo IDENTITY_API_URL=http://localhost:9999 >> .env
+    node test/mock-identity.mjs        (prints a member token; leave running)
+    npx netlify-cli dev                (second terminal)
+    npm test                           (math)
+    node test/e2e.mjs                  (end-to-end, third terminal)
+IDENTITY_API_URL points the site at a stand-in for Netlify Identity. Never
+set it in production.
+
+SETTINGS WORTH REVIEWING
+- Default target margin 8% and floor 4% (blankQuote in FreightDesk.js).
+  Each quote can change them.
+- A rate counts as old after 30 days (staleDays in freight/calc.js).
+- Margin = gross margin on the sale price: (sale - landed cost) / sale.
+- FREIGHT_MEMBER_ROLE changes which Identity role counts as staff
+  (default member, matching _redirects).

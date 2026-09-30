@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Bell, BriefcaseBusiness, Building2, CalendarDays, CheckSquare2, ChevronRight, CircleHelp, ContactRound, FileText, Filter, FolderOpen, Globe2, Handshake, LayoutDashboard, LineChart, MapPin, Menu, Network, PackageSearch, Plus, Search, Settings, Target, Truck, UserCircle2, Users, Wheat, X, LogOut } from 'lucide-react';
+import { BarChart3, Bell, BriefcaseBusiness, Building2, CalendarDays, CheckSquare2, ChevronRight, CircleHelp, ContactRound, FileText, Filter, FolderOpen, Globe2, Handshake, LayoutDashboard, LineChart, MapPin, Menu, Network, PackageSearch, Plus, Search, Settings, Ship, Target, Truck, UserCircle2, Users, Wheat, X, LogOut } from 'lucide-react';
 import { pageDefinitions, businessUnits } from './data/demoData.js';
-import { logout } from '@netlify/identity';
+import { logout, getUser, refreshSession } from '@netlify/identity';
 const navGroups = [
     ['Command Centre', [
             ['Dashboard', LayoutDashboard], ['Opportunities', Target], ['Projects', BriefcaseBusiness]
@@ -13,13 +13,16 @@ const navGroups = [
             ['Commodities', Wheat], ['Trade Leads', Network], ['Market Intelligence', LineChart]
         ]],
     ['Operations', [
-            ['Tasks & Follow-ups', CheckSquare2], ['Meetings', CalendarDays], ['Documents', FolderOpen], ['Reports', BarChart3]
+            ['Freight Desk', Ship], ['Tasks & Follow-ups', CheckSquare2], ['Meetings', CalendarDays], ['Documents', FolderOpen], ['Reports', BarChart3]
         ]],
     ['Administration', [
             ['Partners & Referrals', Handshake], ['Settings', Settings], ['Profile', UserCircle2], ['Help & Support', CircleHelp]
         ]]
 ];
 const pageIcon = Object.fromEntries(navGroups.flatMap(([, items]) => items));
+// The Freight Desk is a live, server-backed page (not demo data), loaded from /freight/.
+const FREIGHT_PAGE = 'Freight Desk';
+const freightIdentity = { getUser, refreshSession };
 function valueText(record) {
     return Object.entries(record)
         .filter(([key]) => !['id'].includes(key))
@@ -44,7 +47,7 @@ function initialPageFromHash() {
     if (!location.hash || location.hash === '#') return 'Dashboard';
     try {
         const decoded = decodeURIComponent(location.hash.slice(1));
-        return decoded === 'Dashboard' || pageDefinitions[decoded] ? decoded : 'Dashboard';
+        return decoded === 'Dashboard' || decoded === FREIGHT_PAGE || pageDefinitions[decoded] ? decoded : 'Dashboard';
     } catch {
         return 'Dashboard';
     }
@@ -82,7 +85,7 @@ function App() {
         const onHash = () => {
             try {
                 const next = decodeURIComponent(location.hash.slice(1));
-                if (next && (next === 'Dashboard' || pageDefinitions[next])) setActive(next);
+                if (next && (next === 'Dashboard' || next === FREIGHT_PAGE || pageDefinitions[next])) setActive(next);
             } catch {
                 setActive('Dashboard');
             }
@@ -119,13 +122,15 @@ function App() {
         setToast(`Added to ${section}`);
     };
     return (React.createElement("div", { className: "appShell" },
-        React.createElement(Sidebar, { active: active, onChange: changePage, business: business, setBusiness: setBusiness, open: mobileNav, onClose: () => setMobileNav(false), onQuickAdd: () => setCreateSection(active === 'Dashboard' ? 'Opportunities' : active) }),
+        React.createElement(Sidebar, { active: active, onChange: changePage, business: business, setBusiness: setBusiness, open: mobileNav, onClose: () => setMobileNav(false), onQuickAdd: () => setCreateSection(active === 'Dashboard' || active === FREIGHT_PAGE ? 'Opportunities' : active) }),
         React.createElement("main", { className: "mainArea" },
             React.createElement(Topbar, { business: business, setBusiness: setBusiness, globalQuery: globalQuery, setGlobalQuery: setGlobalQuery, results: globalResults, onSelectResult: ({ section, item }) => { setActive(section); setDetail({ section, item }); setGlobalQuery(''); }, onMenu: () => setMobileNav(true), onToast: setToast }),
-            React.createElement("div", { className: "demoStrip" },
+            active === FREIGHT_PAGE ? (React.createElement("div", { className: "demoStrip" },
+                React.createElement("strong", null, "LIVE DATA"),
+                React.createElement("span", null, "Freight Desk rates, quotes and client links are saved on the server and shared with everyone who has access."))) : (React.createElement("div", { className: "demoStrip" },
                 React.createElement("strong", null, "DEMO PROTOTYPE"),
-                React.createElement("span", null, "Sample/internal historical data only. No confidential records or live database.")),
-            React.createElement("div", { className: "contentArea" }, active === 'Dashboard' ? (React.createElement(Dashboard, { records: records, business: business, onOpen: (section, item) => setDetail({ section, item }), onGo: setActive, onQuickAdd: () => setCreateSection('Opportunities') })) : (React.createElement(DataPage, { name: active, definition: pageDefinitions[active], items: records[active] || [], business: business, query: pageQuery, setQuery: setPageQuery, filterValue: filterValue, setFilterValue: setFilterValue, onOpen: item => setDetail({ section: active, item }), onCreate: () => setCreateSection(active) })))),
+                React.createElement("span", null, "Sample/internal historical data only. No confidential records or live database."))),
+            React.createElement("div", { className: "contentArea" }, active === 'Dashboard' ? (React.createElement(Dashboard, { records: records, business: business, onOpen: (section, item) => setDetail({ section, item }), onGo: setActive, onQuickAdd: () => setCreateSection('Opportunities') })) : active === FREIGHT_PAGE ? (React.createElement(FreightDeskPage, null)) : (React.createElement(DataPage, { name: active, definition: pageDefinitions[active], items: records[active] || [], business: business, query: pageQuery, setQuery: setPageQuery, filterValue: filterValue, setFilterValue: setFilterValue, onOpen: item => setDetail({ section: active, item }), onCreate: () => setCreateSection(active) })))),
         detail && React.createElement(DetailDrawer, { section: detail.section, item: detail.item, onClose: () => setDetail(null) }),
         createSection && pageDefinitions[createSection] && (React.createElement(CreateModal, { section: createSection, definition: pageDefinitions[createSection], business: business, onClose: () => setCreateSection(null), onSave: addRecord })),
         toast && React.createElement("div", { className: "toast" }, toast)));
@@ -387,6 +392,23 @@ function CreateModal({ section, definition, business, onClose, onSave }) {
             React.createElement("div", { className: "modalActions" },
                 React.createElement("button", { type: "button", className: "secondary", onClick: onClose }, "Cancel"),
                 React.createElement("button", { className: "primary", type: "submit" }, "Save demo record"))));
+}
+// Loaded on demand so the rest of the portal never depends on it.
+function FreightDeskPage() {
+    const [Desk, setDesk] = useState(null);
+    const [failed, setFailed] = useState(false);
+    useEffect(() => {
+        let live = true;
+        import('../freight/FreightDesk.js')
+            .then(mod => { if (live) setDesk(() => mod.default); })
+            .catch(() => { if (live) setFailed(true); });
+        return () => { live = false; };
+    }, []);
+    if (failed)
+        return React.createElement(Empty, { label: "The Freight Desk could not load. Reload the page to try again." });
+    if (!Desk)
+        return React.createElement(Empty, { label: "Loading the Freight Desk\u2026" });
+    return React.createElement(Desk, { variant: 'portal', identity: freightIdentity });
 }
 function Empty({ label }) { return React.createElement("div", { className: "emptyState" },
     React.createElement(PackageSearch, { size: 22 }),
