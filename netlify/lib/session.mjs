@@ -3,6 +3,11 @@
 
 export const COOKIE_NAME = "ftc_session";
 
+// Client-link sessions last until the link is revoked. Browsers cap cookie
+// lifetimes at about 400 days, so the cookie is re-issued with a fresh
+// lifetime every time the client opens the desk (see freight-session.mjs).
+export const SESSION_TTL_SECONDS = 400 * 86_400;
+
 const encoder = new TextEncoder();
 
 export function env(name) {

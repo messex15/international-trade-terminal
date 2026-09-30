@@ -38,7 +38,7 @@ const req = (path, { method = "GET", body, headers = {}, cookie } = {}) =>
   });
 
 async function clientSession(label) {
-  const res = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label, expiresHours: 24, sessionDays: 7 } });
+  const res = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label, expiresHours: 24 } });
   assert.equal(res.status, 201, await res.clone().text());
   const { url, link } = await res.json();
   const token = url.split("#")[1];
@@ -91,6 +91,8 @@ let client;
 await step("a client link redeems once and opens the desk", async () => {
   client = await clientSession("E2E client");
   assert.match(client.cookie, /^ftc_session=/);
+  const sessionRes = await req("/api/freight/session", { cookie: client.cookie });
+  assert.match(sessionRes.headers.get("set-cookie") || "", /^ftc_session=.+Max-Age=34560000/, "visits renew the sign-in");
   assert.equal((await req("/freight/", { cookie: client.cookie })).status, 200);
   const s = await (await req("/api/freight/session", { cookie: client.cookie })).json();
   assert.equal(s.kind, "link");

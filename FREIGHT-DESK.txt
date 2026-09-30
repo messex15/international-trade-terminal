@@ -27,8 +27,9 @@ CLIENT LINKS
 1. Freight Desk > Client access > enter who it is for > Create link.
 2. Copy the link and send it to that person only. It works ONCE and expires
    after 1 to 30 days if unopened.
-3. They open it and press "Open the Freight Desk". That signs in their
-   browser for 7, 30 or 90 days and uses up the link.
+3. They open it and press "Open the Freight Desk". That uses up the link
+   and signs in their browser until you revoke access. Each visit renews
+   the sign-in, so it does not lapse while they keep using the desk.
 4. Revoke ends their access on their next click.
 - The page asks for a button press on purpose: email security scanners
   open links automatically, and would otherwise use them up.

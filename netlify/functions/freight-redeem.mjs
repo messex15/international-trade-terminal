@@ -3,7 +3,7 @@
 // The access page only calls this after the person clicks a button, so
 // email link scanners that pre-open URLs cannot burn the link.
 import { accessStore, assertSameOrigin, HttpError, json, readJson, readVersionedWithRetry, route, sessionSecret } from "../lib/http.mjs";
-import { sessionCookie, sha256Hex, signSession } from "../lib/session.mjs";
+import { SESSION_TTL_SECONDS, sessionCookie, sha256Hex, signSession } from "../lib/session.mjs";
 
 const GONE = {
   invalid: "This access link is not valid. Ask for a new one.",
@@ -32,12 +32,9 @@ export default route(async (req) => {
   if (link.usedAt) throw new HttpError(410, GONE.used);
   if (Date.parse(link.expiresAt) <= now.getTime()) throw new HttpError(410, GONE.expired);
 
-  const sessionSeconds = Math.round(link.sessionDays * 86_400);
-  const sessionExpires = new Date(now.getTime() + sessionSeconds * 1000);
   const updated = {
     ...link,
     usedAt: now.toISOString(),
-    sessionExpiresAt: sessionExpires.toISOString(),
     usedFrom: (req.headers.get("user-agent") || "").slice(0, 160),
   };
 
@@ -48,13 +45,13 @@ export default route(async (req) => {
   const cookie = await signSession(secret, {
     sid: hash,
     iat: Math.floor(now.getTime() / 1000),
-    exp: Math.floor(sessionExpires.getTime() / 1000),
+    exp: Math.floor(now.getTime() / 1000) + SESSION_TTL_SECONDS,
   });
 
   return json(
-    { ok: true, label: link.label, sessionExpiresAt: updated.sessionExpiresAt, next: "/freight/" },
+    { ok: true, label: link.label, next: "/freight/" },
     200,
-    { "set-cookie": sessionCookie(cookie, sessionSeconds) },
+    { "set-cookie": sessionCookie(cookie, SESSION_TTL_SECONDS) },
   );
 });
 

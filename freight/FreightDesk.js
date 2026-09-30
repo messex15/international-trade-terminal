@@ -778,12 +778,12 @@ function QuoteDrawer({ summary: q, onClose, onLoad, onDelete }) {
 
 // ------------------------------------------------------------------ client access
 
-const LINK_STATUS = { 'In use': 'badge good', 'Not opened yet': 'badge', 'Session ended': 'badge', Expired: 'badge warn', Revoked: 'badge bad' };
+const LINK_STATUS = { 'In use': 'badge good', 'Not opened yet': 'badge', Expired: 'badge warn', Revoked: 'badge bad' };
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 function AccessView({ api, notify }) {
   const [links, setLinks] = useState(null);
-  const [form, setForm] = useState({ label: '', expiresHours: '72', sessionDays: '30' });
+  const [form, setForm] = useState({ label: '', expiresHours: '72' });
   const [created, setCreated] = useState(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -796,7 +796,7 @@ function AccessView({ api, notify }) {
     if (!form.label.trim()) return notify('Say who the link is for first.', true);
     setBusy(true);
     try {
-      const res = await api('access-links', { method: 'POST', body: { label: form.label, expiresHours: Number(form.expiresHours), sessionDays: Number(form.sessionDays) } });
+      const res = await api('access-links', { method: 'POST', body: { label: form.label, expiresHours: Number(form.expiresHours) } });
       setCreated(res);
       setCopied(false);
       setForm((f) => ({ ...f, label: '' }));
@@ -835,18 +835,16 @@ function AccessView({ api, notify }) {
     h('section', { className: 'card fdAccessCard' },
       h('div', { className: 'cardTitle' }, h('h3', null, 'Create a client link')),
       h('form', { onSubmit: create },
-        h('div', { className: 'formGrid fdGrid3' },
+        h('div', { className: 'formGrid' },
           h(Field, { label: 'Who it is for' }, h('input', { value: form.label, onChange: set('label'), maxLength: 80, placeholder: 'Jane Smith, Prairie Pulse Traders' })),
-          h(Field, { label: 'Link stops working after', hint: 'If nobody opens it by then.' },
-            h('select', { value: form.expiresHours, onChange: set('expiresHours') }, [['24', '1 day'], ['72', '3 days'], ['168', '7 days'], ['720', '30 days']].map(([v, l]) => h('option', { key: v, value: v }, l)))),
-          h(Field, { label: 'Stay signed in for', hint: 'After the link is first opened.' },
-            h('select', { value: form.sessionDays, onChange: set('sessionDays') }, [['7', '7 days'], ['30', '30 days'], ['90', '90 days']].map(([v, l]) => h('option', { key: v, value: v }, l))))),
+          h(Field, { label: 'Link stops working after', hint: 'If nobody opens it by then. Once opened, access lasts until you revoke it.' },
+            h('select', { value: form.expiresHours, onChange: set('expiresHours') }, [['24', '1 day'], ['72', '3 days'], ['168', '7 days'], ['720', '30 days']].map(([v, l]) => h('option', { key: v, value: v }, l))))),
         h('div', { className: 'modalActions' }, h('button', { type: 'submit', className: 'primary', disabled: busy }, h(Link2, { size: 15 }), busy ? 'Creating…' : 'Create link'))),
       created && h('div', { className: 'fdNewLink' },
         h('div', { className: 'fdCombo' },
           h('input', { id: 'fd-new-link', readOnly: true, value: created.url, onFocus: (e) => e.target.select(), 'aria-label': 'New client link' }),
           h('button', { type: 'button', className: 'secondary', onClick: copy }, h(copied ? Check : Copy, { size: 15 }), copied ? 'Copied' : 'Copy link')),
-        h('p', null, `Send this to ${created.link.label} only. It works once, for one browser, and stops working on ${when(created.link.expiresAt)} if unopened. It is shown only now; if it gets lost, create a new one.`))),
+        h('p', null, `Send this to ${created.link.label} only. It works once, for one browser, and keeps them signed in until you revoke it. If it is not opened by ${when(created.link.expiresAt)}, it stops working. It is shown only now; if it gets lost, create a new one.`))),
     h('section', { className: 'card dataCard' },
       h('div', { className: 'toolbar' },
         h('span', { className: 'fdToolbarTitle' }, 'All client links'),
@@ -855,14 +853,14 @@ function AccessView({ api, notify }) {
         : links.length === 0 ? h(Empty, { label: 'No client links yet. Create one above to give someone access.' })
           : h('div', { className: 'tableWrap' },
             h('table', { className: 'fdStatic' },
-              h('thead', null, h('tr', null, ['For', 'Status', 'Created', 'Opened', 'Access ends', ''].map((c, k) => h('th', { key: k }, c)))),
+              h('thead', null, h('tr', null, ['For', 'Status', 'Created', 'Opened', 'Access', ''].map((c, k) => h('th', { key: k }, c)))),
               h('tbody', null, links.map((l) => h('tr', { key: l.id },
                 h('td', null, h('b', null, l.label), l.createdBy && h('small', null, `Created by ${l.createdBy}`)),
                 h('td', null, h('span', { className: LINK_STATUS[l.status] || 'badge' }, l.status)),
                 h('td', null, when(l.createdAt)),
                 h('td', null, when(l.usedAt)),
-                h('td', null, l.revokedAt ? `Revoked ${when(l.revokedAt)}` : l.usedAt ? when(l.sessionExpiresAt) : `Link expires ${when(l.expiresAt)}`),
-                h('td', { className: 'fdNum' }, !l.revokedAt && l.status !== 'Expired' && l.status !== 'Session ended'
+                h('td', null, l.revokedAt ? `Revoked ${when(l.revokedAt)}` : l.usedAt ? 'Until revoked' : `Link expires ${when(l.expiresAt)}`),
+                h('td', { className: 'fdNum' }, !l.revokedAt && l.status !== 'Expired'
                   && h('button', { type: 'button', className: 'secondary fdDanger', onClick: () => revoke(l) }, 'Revoke')))))))));
 }
 

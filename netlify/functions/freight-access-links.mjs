@@ -2,7 +2,7 @@
 //
 // GET    /api/freight/access-links        list links
 // POST   /api/freight/access-links        create a single-use link
-//        { label, expiresHours?, sessionDays? }
+//        { label, expiresHours? }   once opened, access lasts until revoked
 // DELETE /api/freight/access-links/:id    revoke a link (also ends its session)
 import {
   accessStore,
@@ -20,9 +20,7 @@ import { env, randomToken, sha256Hex } from "../lib/session.mjs";
 
 function status(link, now = Date.now()) {
   if (link.revokedAt) return "Revoked";
-  if (link.usedAt) {
-    return link.sessionExpiresAt && Date.parse(link.sessionExpiresAt) <= now ? "Session ended" : "In use";
-  }
+  if (link.usedAt) return "In use";
   if (Date.parse(link.expiresAt) <= now) return "Expired";
   return "Not opened yet";
 }
@@ -34,9 +32,7 @@ function publicView(id, link) {
     createdAt: link.createdAt,
     createdBy: link.createdBy || "",
     expiresAt: link.expiresAt,
-    sessionDays: link.sessionDays,
     usedAt: link.usedAt || null,
-    sessionExpiresAt: link.sessionExpiresAt || null,
     revokedAt: link.revokedAt || null,
     status: status(link),
   };
@@ -67,7 +63,6 @@ export default route(async (req, context) => {
     const label = cleanText(body.label, 80);
     if (!label) throw new HttpError(400, "Say who the link is for, such as the person's name and company.");
     const expiresHours = cleanNumber(body.expiresHours ?? 72, "Link lifetime", { min: 1, max: 720 });
-    const sessionDays = cleanNumber(body.sessionDays ?? 30, "Session length", { min: 1, max: 90 });
 
     const token = randomToken(32);
     const hash = await sha256Hex(token);
@@ -77,7 +72,6 @@ export default route(async (req, context) => {
       createdAt: now.toISOString(),
       createdBy: member.name,
       expiresAt: new Date(now.getTime() + expiresHours * 3_600_000).toISOString(),
-      sessionDays,
       usedAt: null,
       revokedAt: null,
     };
