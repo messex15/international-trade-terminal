@@ -102,7 +102,7 @@ export function clearedSessionCookie() {
 // ---------------------------------------------------------------------------
 // Portal members (Netlify Identity)
 //
-// Staff signed in to the command centre carry Netlify Identity's `nf_jwt`
+// Staff signed in to the trade terminal carry Netlify Identity's `nf_jwt`
 // cookie. We never trust its contents directly: the token is sent to the
 // site's own Identity endpoint (/.netlify/identity/user), which checks the
 // signature and expiry and returns the user. This is the same check the
