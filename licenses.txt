@@ -1,10 +1,10 @@
-INTERNATIONAL TRADE TERMINAL
+AINU BUSINESS COMMAND CENTRE
 THIRD-PARTY SOFTWARE NOTICES
 
 Last updated: September 23, 2026
 
 This file documents third-party software used by the current web application.
-It does NOT grant a license to the INTERNATIONAL TRADE TERMINAL application code,
+It does NOT grant a license to the AINU Business Command Centre application code,
 business data, branding, or proprietary content. Unless separately licensed, those
 materials remain subject to their respective owners' rights.
 

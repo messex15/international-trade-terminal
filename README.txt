@@ -1,4 +1,4 @@
-INTERNATIONAL TRADE TERMINAL - Static Deployment Build
+AINU Business Command Centre - Static Deployment Build
 
 This folder is prebuilt and requires no npm/Vite build step.
 

@@ -3,7 +3,7 @@ import { BarChart3, Bell, BriefcaseBusiness, Building2, CalendarDays, CheckSquar
 import { pageDefinitions, businessUnits } from './data/demoData.js';
 import { logout, getUser, refreshSession } from '@netlify/identity';
 const navGroups = [
-    ['TRADE TERMINAL', [
+    ['Command Centre', [
             ['Dashboard', LayoutDashboard], ['Opportunities', Target], ['Projects', BriefcaseBusiness]
         ]],
     ['Trade Network', [
@@ -143,8 +143,8 @@ function Sidebar({ active, onChange, business, setBusiness, open, onClose, onQui
                 React.createElement("div", { className: "brandMark" },
                     React.createElement(Globe2, { size: 25 })),
                 React.createElement("div", { className: "brandWords" },
-                    React.createElement("b", null, "DASHBOARD"),
-                    React.createElement("small", null, "INTERNATIONAL TRADE TERMINAL")),
+                    React.createElement("b", null, "AINU"),
+                    React.createElement("small", null, "BUSINESS COMMAND CENTRE")),
                 React.createElement("button", { className: "closeNav", onClick: onClose, "aria-label": "Close navigation" },
                     React.createElement(X, { size: 19 }))),
             React.createElement("label", { className: "sideSelectLabel" }, "Business unit"),
@@ -227,7 +227,7 @@ function Dashboard({ records, business, onOpen, onGo, onQuickAdd }) {
     ];
     const pipeline = [['Research', opportunities.filter(x => x.stage === 'Research').length], ['Contacted', opportunities.filter(x => x.stage === 'Contacted').length], ['In Discussion', opportunities.filter(x => x.stage === 'In Discussion').length], ['Proposal Sent', opportunities.filter(x => x.stage === 'Proposal Sent').length], ['Negotiation', opportunities.filter(x => x.stage === 'Negotiation').length]];
     return React.createElement(React.Fragment, null,
-        React.createElement(HeaderBlock, { title: "Good afternoon, Ainu", subtitle: `INTERNATIONAL TRADE TERMINAL overview${business !== 'All Businesses' ? ` for ${business}` : ''}.`, actionLabel: "Quick Add", onAction: onQuickAdd }),
+        React.createElement(HeaderBlock, { title: "Good afternoon, Ainu", subtitle: `Business command centre overview${business !== 'All Businesses' ? ` for ${business}` : ''}.`, actionLabel: "Quick Add", onAction: onQuickAdd }),
         React.createElement("div", { className: "statGrid" }, stats.map(([label, num, meta, Icon], i) => React.createElement("button", { className: "statCard", key: label, onClick: () => label === 'Needs Ainu' ? onGo('Tasks & Follow-ups') : null },
             React.createElement("span", { className: `statGlyph s${i}` },
                 React.createElement(Icon, { size: 19 })),

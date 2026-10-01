@@ -1,4 +1,4 @@
-INTERNATIONAL TRADE TERMINAL - FREIGHT DESK
+AINU Business Command Centre - FREIGHT DESK
 
 WHAT IT IS
 A rate memory and landed cost calculator for trading.
