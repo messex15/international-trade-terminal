@@ -36,7 +36,7 @@ async function start() {
     return;
   }
   if (reason === 'expired') {
-    $('noLinkText').textContent = 'Your Freight Desk session on this browser has ended. Ask your contact at AINU for a new access link.';
+    $('noLinkText').textContent = 'Your Freight Desk session on this browser has ended. Ask your contact for a new access link.';
   }
   show('noLink');
 }

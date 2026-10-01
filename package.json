@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "AINU Business Command Centre. Static site plus Netlify functions for the Freight Desk.",
+  "description": "International Trade Terminal. Static site plus Netlify functions for the Freight Desk.",
   "scripts": {
     "dev": "netlify dev",
     "secrets": "node scripts/generate-secrets.mjs",

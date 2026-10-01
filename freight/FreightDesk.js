@@ -1,6 +1,6 @@
 // Freight Desk: rate memory and landed cost calculator.
 //
-// Rendered inside the command centre (src/App.js) for portal members, and on
+// Rendered inside the trade terminal (src/App.js) for portal members, and on
 // its own at /freight/ for clients who open a single-use access link. It uses
 // the portal's own classes from styles.css (pageHead, card, toolbar,
 // tableWrap, badge, formGrid, overlay, drawer, modal, toast); freight.css adds

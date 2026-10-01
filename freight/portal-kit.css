@@ -9,9 +9,9 @@ body{margin:0;min-width:320px;background:#f4f7fb}
 button,input,select{font:inherit}
 button{cursor:pointer}
 button:focus-visible,input:focus-visible,select:focus-visible,tr:focus-visible{outline:3px solid rgba(54,123,185,.28);outline-offset:2px}
-.brandMark{width:39px;height:39px;border:1px solid rgba(212,162,58,.55);display:grid;place-items:center;border-radius:10px;color:var(--gold)}
+.brandMark{flex:none;width:39px;height:39px;border:1px solid rgba(212,162,58,.55);display:grid;place-items:center;border-radius:10px;color:var(--gold)}
 .brandWords{display:flex;flex-direction:column;line-height:1.05}
-.brandWords b{font-size:20px;letter-spacing:.14em}
+.brandWords b{font-size:16px;letter-spacing:.14em}
 .brandWords small{font-size:8px;letter-spacing:.14em;color:#b7c7d9;margin-top:5px}
 .iconButton{border:0;background:transparent;color:#64758a;display:grid;place-items:center;padding:7px;border-radius:7px}
 .iconButton:hover{background:#f0f4f8}
