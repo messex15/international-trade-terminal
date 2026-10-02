@@ -114,19 +114,13 @@ const deal = (lines, extra = {}) => ({
 const loading = { rateId: null, type: "loading", basis: "per_tonne", amount: 20, currency: "CAD" };
 const commissionPct = (amount) => ({ rateId: null, standard: true, type: "commission", basis: "percent_of_sale", amount, currency: "CAD" });
 
-test("commission on the sale price is covered by the target and floor prices", () => {
+test("a commission on the sale price needs the final price", () => {
   const q = computeQuote(deal([loading, commissionPct(2)]));
-  // 520 of cost before commission: price = 520 / (1 - 8% - 2%)
-  near(q.targetPricePerTonneCAD, 520 / 0.9);
-  near(q.floorPricePerTonneCAD, 520 / 0.94);
-  const p = q.targetPricePerTonneCAD;
-  near((p - (520 + 0.02 * p)) / p, 0.08); // exactly the target margin after paying commission
-  assert.equal(q.saleBasedAt, "target");
-  assert.equal(q.saleBasedPct, 2);
-  near(q.lines[1].perTonneCAD, 0.02 * p);
-  assert.equal(q.lines[1].atPrice, "target");
-  near(q.landedPerTonneCAD, 520 + 0.02 * p);
-  assert.equal(q.hasInputErrors, false);
+  assert.equal(q.hasInputErrors, true);
+  assert.ok(q.issues.some((i) => i.message.startsWith("Commission: Enter a final price per MT first")), JSON.stringify(q.issues));
+  assert.equal(q.saleBasedAt, null);
+  assert.equal(q.lines[1].perTonneCAD, null);
+  assert.equal(q.final, null);
 });
 
 test("with an offered price, commission is charged on that price", () => {
@@ -187,12 +181,11 @@ test("final price is the entered price, and earnings are what is left after land
   near(q.final.marginPct, (68 / 600) * 100);
 });
 
-test("with no price entered, the final price is the lowest price at the target margin", () => {
-  const q = computeQuote(deal([loading, commissionPct(2)]));
-  assert.equal(q.final.source, "target");
-  near(q.final.perTonneCAD, 520 / 0.9);
-  near(q.final.marginPct, 8);
-  near(q.final.earningsTotalCAD, (520 / 0.9) * 0.08 * 100);
+test("no final price or estimated earnings until a final price is entered", () => {
+  const q = computeQuote(deal([loading]));
+  assert.equal(q.final, null);
+  assert.equal(q.hasInputErrors, false, "a costing sheet without a price can still be saved");
+  near(q.landedPerTonneCAD, 520);
 });
 
 test("a USD final price also reports its USD value", () => {

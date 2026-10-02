@@ -236,7 +236,9 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
   // Price for a gross margin m with s% of the sale price going to commission:
   // price - (cost + s * price) = m * price, so price = cost / (1 - m - s).
   if (salePct > 0 && targetMargin + salePct >= 100) {
-    issues.push({ level: "error", code: "input", message: "Target margin plus commission must be under 100% of the sale price." });
+    issues.push({ level: "error", code: "input", message: targetMargin > 0
+      ? "Target margin plus commission must be under 100% of the sale price."
+      : "Commission must be under 100% of the sale price." });
   }
   const priceAt = (margin) =>
     baseLanded === null || margin < 0 || margin + salePct >= 100 ? null : baseLanded / (1 - (margin + salePct) / 100);
@@ -245,10 +247,10 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
 
   const offered = num(q.salePrice);
   const offeredPerTonne = offered !== null && offered > 0 ? toCAD(offered, q.saleCurrency, usdcad) : null;
-  // Charges on the sale price are shown at the offered price, or at the target
-  // price when no offer is entered.
-  const saleBasedAt = offeredPerTonne !== null ? "offered" : targetPricePerTonne !== null ? "target" : null;
-  const referencePrice = offeredPerTonne ?? targetPricePerTonne;
+  // Charges on the sale price (commission) are worked out on the final price
+  // entered on the quote; without one they cannot be priced yet.
+  const saleBasedAt = offeredPerTonne !== null ? "offered" : null;
+  const referencePrice = offeredPerTonne;
 
   const lines = (q.lines || []).map((line, i) => {
     let cost = costs[i];
@@ -257,7 +259,7 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
     }
     if (cost.salePct !== undefined) {
       cost = referencePrice === null
-        ? { error: "Needs a purchase price first." }
+        ? { error: "Enter a final price per MT first; this is a % of it." }
         : { perTonne: (referencePrice * cost.salePct) / 100, atPrice: saleBasedAt };
     }
     const flags = rateFlags(line, quoteDate, staleDays);
@@ -293,12 +295,12 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
       belowTarget: marginPct < targetMargin,
     };
     if (profitPerTonne < 0) {
-      issues.push({ level: "error", code: "margin", message: "The offered price is below landed cost. This deal loses money." });
+      issues.push({ level: "error", code: "margin", message: "The final price is below landed cost. This deal loses money." });
     } else if (sale.belowFloor) {
       issues.push({
         level: "error",
         code: "margin",
-        message: `The offered price leaves a ${marginPct.toFixed(1)}% margin, below the ${floorMargin}% floor.`,
+        message: `The final price leaves a ${marginPct.toFixed(1)}% margin, below the ${floorMargin}% floor.`,
       });
     }
   }
@@ -316,16 +318,15 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
 
   const usd = (cad) => (cad === null || !(usdcad > 0) ? null : cad / usdcad);
 
-  // Final price: the price going to the customer. The price entered on the
-  // quote, or the lowest price at the target margin when none is entered.
+  // Final price: the price for the customer, as entered on the quote.
   // Estimated earnings: final price minus the full landed cost (commission on
   // the sale price included, worked out at that same price).
   let final = null;
-  const finalPerTonne = offeredPerTonne ?? targetPricePerTonne;
+  const finalPerTonne = offeredPerTonne;
   if (finalPerTonne !== null && finalPerTonne > 0 && landedPerTonne !== null) {
     const earningsPerTonne = finalPerTonne - landedPerTonne;
     final = {
-      source: offeredPerTonne !== null ? "entered" : "target",
+      source: "entered",
       perTonneCAD: finalPerTonne,
       perTonneUSD: usd(finalPerTonne),
       totalCAD: quantity > 0 ? finalPerTonne * quantity : null,

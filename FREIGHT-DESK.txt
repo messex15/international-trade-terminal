@@ -10,10 +10,9 @@ per-unit prices are in metric tonnes, shown as MT.
   copy of the rates they used).
 - Landed cost: build a quote from those rates. Railcar, container and
   truckload charges count whole units. USD converts at a typed rate or the
-  Bank of Canada daily rate. Shows the lowest price for the target margin,
-  the floor price, and whether an offered price meets target, clears the
-  floor, or loses money.
-- Margin protection: each line warns when its rate has expired, is older
+  Bank of Canada daily rate. Enter the final price for the customer to see
+  the estimated earnings, or a warning when that price loses money.
+- Rate checks: each line warns when its rate has expired, is older
   than 30 days, is not in effect yet, or a newer rate is on file. A quote
   "holds until" the first expiry among the rates it uses.
 - Standard rows: every quote has Transloading, Labour charges, Ocean
@@ -21,20 +20,16 @@ per-unit prices are in metric tonnes, shown as MT.
   is not part of the quote (no cost, no warnings, not printed). Adding a
   rate of the same type from rate memory fills the blank row instead of
   adding another.
-- Commission can be a % of the sale price or an amount per MT. A % of the
-  sale price is covered by the target and floor prices:
-      price = (goods + other charges) / (1 - margin - commission %)
-  and its cost per MT is shown at the offered price, or at the target
-  price when no offer is entered.
+- Commission can be a % of the final price or an amount per MT. A % needs
+  the final price per MT, and its cost per MT is worked out from it.
 - Deal details include the customer and the product grade.
 - "Other charge": give it a name (Fumigation, Bagging, Demurrage...) and the
   name is shown in place of "Other charge" on the quote, the PDF and in rate
   memory. In rate memory the name is required, and each name keeps its own
   rate history.
-- Final price and estimated earnings: the final price is the price entered on
-  the quote, or the lowest price at the target margin when none is entered.
-  Estimated earnings = final price - landed cost (all charges, commission
-  included), for the whole shipment.
+- Final price and estimated earnings: shown once a final price per MT is
+  entered on the quote. Estimated earnings = final price - landed cost (all
+  charges, commission included), for the whole shipment.
 - Customers: lists of the companies you quote to, with contact and usual
   delivery terms. Pick one in the quote's Customer box; its delivery terms
   fill in if the quote has none. A new name typed on a quote can be added to
@@ -50,11 +45,13 @@ per-unit prices are in metric tonnes, shown as MT.
   name" on the PDF); they can type another.
 - Saved quotes: the server recomputes totals and keeps a copy of the rates
   used. Opening a saved quote re-checks it against today's rates.
-- Print / PDF: the top of the page shows "Your company name" from the quote
-  (default International Trade Terminal) and the time it was printed. New
-  quotes keep the last name used in that browser; saved quotes keep their own.
-  The browser's own header and footer (page title, web address, page numbers)
-  are switched off while a quote prints.
+- Print / PDF: prints as a Costing Sheet on one page. A long quote is
+  scaled down to fit; a short one prints at full size. The top of the page
+  shows "Your company name" from the quote (default International Trade
+  Terminal) and the time it was printed. New quotes keep the last name used
+  in that browser; saved quotes keep their own. The browser's own header and
+  footer (page title, web address, page numbers) are switched off while a
+  quote prints.
 
 WHO CAN USE IT
 /app/#Freight Desk   Staff. Sidebar > Operations > Freight Desk. Uses the
@@ -129,9 +126,6 @@ IDENTITY_API_URL points the site at a stand-in for Netlify Identity. Never
 set it in production.
 
 SETTINGS WORTH REVIEWING
-- Default target margin 8% and floor 4% (blankQuote in FreightDesk.js).
-  Each quote can change them.
 - A rate counts as old after 30 days (staleDays in freight/calc.js).
-- Margin = gross margin on the sale price: (sale - landed cost) / sale.
 - FREIGHT_MEMBER_ROLE changes which Identity role counts as staff
   (default member, matching _redirects).

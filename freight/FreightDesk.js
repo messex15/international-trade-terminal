@@ -5,7 +5,7 @@
 // the portal's own classes from styles.css (pageHead, card, toolbar,
 // tableWrap, badge, formGrid, overlay, drawer, modal, toast); freight.css adds
 // only the pieces the portal has no equivalent for.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArchiveRestore, Calculator, Check, Copy, Download, Filter, History, KeyRound,
   Link2, PackageSearch, PencilLine, Plus, Printer, RefreshCw, Search, Ship, Trash2, TriangleAlert, Users, X,
@@ -112,18 +112,26 @@ const COMMODITIES = ['Yellow peas', 'Green peas', 'Red lentils', 'Green lentils'
 // Printed at the top of the PDF. Each person can change it; new quotes keep
 // the last name used in that browser, and saved quotes keep their own.
 const DEFAULT_COMPANY = 'International Trade Terminal';
+// The printed costing sheet is fitted into this box (CSS px at 96 per inch):
+// A4's width (210 mm) and Letter's height (11 in, 1056 px) less a little slack
+// for rounding, so it is one page on either paper.
+const PAGE_FIT = { width: 794, height: 1048 };
 
 function blankQuote() {
   return {
     companyName: DEFAULT_COMPANY, reference: '', buyer: '', commodity: '', grade: '', destination: '', quantity_t: '', quoteDate: isoToday(),
     purchasePrice: '', purchaseCurrency: 'CAD', usdcad: '', usdcadDate: '',
-    targetMarginPct: 8, minMarginPct: 4, salePrice: '', saleCurrency: 'USD', lines: withStandardLines(),
+    salePrice: '', saleCurrency: 'USD', lines: withStandardLines(),
   };
+}
+/** Quotes no longer have margin targets; older drafts and saved quotes drop them. */
+function withoutMargins({ targetMarginPct, minMarginPct, ...quote }) {
+  return quote;
 }
 function loadDraft() {
   try {
     const draft = { ...blankQuote(), ...(JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null') || {}) };
-    return { ...draft, lines: withStandardLines(Array.isArray(draft.lines) ? draft.lines : []) };
+    return withoutMargins({ ...draft, lines: withStandardLines(Array.isArray(draft.lines) ? draft.lines : []) });
   } catch {
     return blankQuote();
   }
@@ -148,11 +156,10 @@ const sortCustomers = (list) => [...list].sort((a, b) => a.name.localeCompare(b.
 
 /** Final price and estimated earnings from a saved quote summary (older summaries included). */
 function finalOf(q) {
-  const entered = q.salePerTonneCAD !== null && q.salePerTonneCAD !== undefined;
-  const perTonne = entered ? q.salePerTonneCAD : q.targetPricePerTonneCAD;
+  const perTonne = q.salePerTonneCAD;
   if (!(perTonne > 0) || q.landedPerTonneCAD === null || q.landedPerTonneCAD === undefined) return null;
   const earningsPerTonne = perTonne - q.landedPerTonneCAD;
-  return { entered, perTonne, marginPct: (earningsPerTonne / perTonne) * 100, earnings: q.quantity_t > 0 ? earningsPerTonne * q.quantity_t : null };
+  return { perTonne, earnings: q.quantity_t > 0 ? earningsPerTonne * q.quantity_t : null };
 }
 
 function newerRateFor(line, rates) {
@@ -266,6 +273,8 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   const [openQuote, setOpenQuote] = useState(null);
   const [saving, setSaving] = useState(false);
   const [printJob, setPrintJob] = useState(null);
+  const rootRef = useRef(null);
+  const fitRef = useRef(null);
   const [customers, setCustomers] = useState([]);
   const [customerEditor, setCustomerEditor] = useState(null);
 
@@ -323,8 +332,8 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     setSaving(true);
     try {
       const { quote: saved } = await api('quotes', { method: 'POST', body: quote });
-      notify(saved.result.sale?.belowFloor
-        ? 'Quote saved. It is marked below your margin floor.'
+      notify(saved.result.final && saved.result.final.earningsPerTonneCAD < 0
+        ? 'Quote saved. At its final price it loses money.'
         : `Quote saved${saved.inputs.reference ? ` as ${saved.inputs.reference}` : ''}.`);
       setQuotes((await api('quotes')).quotes);
     } catch (err) {
@@ -346,14 +355,14 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
 
   function newQuote() {
     if (quote.lines.some((l) => !isUnusedLine(l)) && !confirm('Start a new quote? The current one is cleared unless you saved it.')) return;
-    setQuote((q) => ({ ...blankQuote(), companyName: q.companyName, targetMarginPct: q.targetMarginPct, minMarginPct: q.minMarginPct, usdcad: q.usdcad, usdcadDate: q.usdcadDate }));
+    setQuote((q) => ({ ...blankQuote(), companyName: q.companyName, usdcad: q.usdcad, usdcadDate: q.usdcadDate }));
   }
 
   function printQuote() {
     const company = String(quote.companyName || '').trim();
     const ref = String(quote.reference || '').trim();
     // Chrome and Edge suggest the page title as the PDF file name.
-    const title = [company, ref ? `Quote ${ref}` : 'Quote'].filter(Boolean).join(' - ');
+    const title = [company, ref ? `Costing Sheet ${ref}` : 'Costing Sheet'].filter(Boolean).join(' - ');
     setPrintJob({ at: new Date().toISOString(), title });
   }
 
@@ -370,6 +379,23 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     const savedTitle = document.title;
     document.title = printJob.title;
     document.body.classList.add('fdPrinting');
+    // One page: lay the sheet out at paper width and, if it is taller than a
+    // page, scale it down. A transform shrinks it exactly as laid out (zoom
+    // re-flows text and comes out taller on paper), and the wrapper, cut to the
+    // scaled height, stops the browser from carrying the rest onto more pages.
+    const fit = fitRef.current;
+    const sheet = rootRef.current;
+    if (fit && sheet) {
+      sheet.style.width = `${PAGE_FIT.width}px`;
+      const height = sheet.getBoundingClientRect().height;
+      if (height > PAGE_FIT.height) {
+        const scale = PAGE_FIT.height / height;
+        sheet.style.transformOrigin = 'top center';
+        sheet.style.transform = `scale(${scale})`;
+        fit.style.height = `${Math.floor(height * scale)}px`;
+        fit.style.overflow = 'hidden';
+      }
+    }
     let finished = false;
     const done = () => {
       if (finished) return;
@@ -378,6 +404,8 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       pageRule.remove();
       document.title = savedTitle;
       document.body.classList.remove('fdPrinting');
+      if (sheet) Object.assign(sheet.style, { width: '', transform: '', transformOrigin: '' });
+      if (fit) Object.assign(fit.style, { height: '', overflow: '' });
       setPrintJob(null);
     };
     window.addEventListener('afterprint', done);
@@ -402,7 +430,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     try {
       const { quote: saved } = await api(`quotes/${id}`);
       const loaded = { ...blankQuote(), companyName: quote.companyName, ...saved.inputs };
-      const next = { ...loaded, lines: withStandardLines(loaded.lines) };
+      const next = withoutMargins({ ...loaded, lines: withStandardLines(loaded.lines) });
       setQuote(next);
       setOpenQuote(null);
       setTab('quote');
@@ -485,12 +513,12 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
 
   const lane = openLane ? lanes.find((l) => l.key === openLane) : null;
 
-  return h('div', { className: 'fd', 'data-variant': variant },
+  return h('div', { className: 'fdFit', ref: fitRef }, h('div', { className: 'fd', 'data-variant': variant, ref: rootRef },
     view === 'quote' && h('div', { className: 'fdPrintHead' },
       h('b', null, quote.companyName),
       printJob && h('span', null, `Printed ${when(printJob.at)}`)),
     h('div', { className: 'pageHead' },
-      h('div', null, h('h1', null, 'Freight Desk'), h('p', null,
+      h('div', null, h('h1', null, h('span', { className: 'fdNoPrint' }, 'Freight Desk'), h('span', { className: 'fdPrintOnly' }, 'Costing Sheet')), h('p', { className: 'fdNoPrint' },
         view === 'customers' && session?.kind === 'link' && session.company
           ? `Customers for ${session.company}, ready to pick on a quote.`
           : SUBTITLES[view])),
@@ -531,7 +559,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     openQuote && h(QuoteDrawer, { summary: openQuote, onClose: () => setOpenQuote(null), onLoad: () => openSavedQuote(openQuote.id), onDelete: () => deleteSavedQuote(openQuote) }),
     h('datalist', { id: 'fd-charge-names' }, [...new Set(rates.filter((r) => r.type === 'other').map((r) => String(r.chargeName || '').trim()).filter(Boolean))].sort().map((n) => h('option', { key: n, value: n }))),
     h('datalist', { id: 'fd-commodities' }, [...new Set([...COMMODITIES, ...rates.map((r) => r.commodity).filter(Boolean)])].map((c) => h('option', { key: c, value: c }))),
-    toast && h('div', { className: `toast${toast.bad ? ' fdToastBad' : ''}`, role: 'status', key: toast.at }, toast.text));
+    toast && h('div', { className: `toast${toast.bad ? ' fdToastBad' : ''}`, role: 'status', key: toast.at }, toast.text)));
 }
 
 // ------------------------------------------------------------------ landed cost
@@ -598,17 +626,15 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
             input('destination', { maxLength: 80, placeholder: 'CFR Manila' })),
           h(Field, { label: 'Quote date' }, input('quoteDate', { type: 'date' })))),
       h('section', { className: 'card' },
-        h('div', { className: 'cardTitle' }, h('h3', null, 'Price and margin')),
+        h('div', { className: 'cardTitle' }, h('h3', null, 'Price')),
         h('div', { className: 'formGrid fdGrid3' },
           h(Field, { label: 'Purchase price per MT', hint: 'What you pay the grower or supplier.' },
             h('span', { className: 'fdCombo' }, num('purchasePrice'), currency('purchaseCurrency', 'Purchase currency'))),
           h(Field, { label: 'USD to CAD rate', hint: quote.usdcadDate ? `Bank of Canada rate for ${formatDate(quote.usdcadDate)}.` : 'CAD for one US dollar.' },
             h('span', { className: 'fdCombo' }, num('usdcad', { placeholder: '1.3850' }),
               h('button', { type: 'button', className: 'secondary', onClick: fetchFx, disabled: fxBusy, title: 'Use the latest Bank of Canada daily rate' }, fxBusy ? '…' : 'BoC rate'))),
-          h(Field, { label: 'Final price per MT', hint: 'Optional. Leave blank to use the lowest price at your target margin.' },
-            h('span', { className: 'fdCombo' }, num('salePrice', { placeholder: 'Optional' }), currency('saleCurrency', 'Final price currency'))),
-          h(Field, { label: 'Target margin (%)' }, num('targetMarginPct', { max: 99.9 })),
-          h(Field, { label: 'Margin floor (%)', hint: 'Never quote below this.' }, num('minMarginPct', { max: 99.9 })))),
+          h(Field, { label: 'Final price per MT', hint: 'The price for the customer.' },
+            h('span', { className: 'fdCombo' }, num('salePrice', { placeholder: 'Optional' }), currency('saleCurrency', 'Final price currency'))))),
       h('section', { className: 'card dataCard fdChargesCard' },
         h('div', { className: 'cardTitle' }, h('h3', null, 'Freight and charges')),
         result.lines.length
@@ -634,7 +660,7 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
   const remove = h('td', { className: 'fdNum' }, h('button', { type: 'button', className: 'iconButton', onClick: () => removeLine(i), 'aria-label': 'Remove this charge' }, h(Trash2, { size: 15 })));
   const computed = [
     h('td', { key: 'pt', className: 'fdNum' }, h('b', null, money(line.perTonneCAD)),
-      line.atPrice && h('small', null, line.atPrice === 'offered' ? 'at the offered price' : 'at the target price')),
+      line.atPrice && h('small', null, 'at the final price')),
     h('td', { key: 'tot', className: 'fdNum' }, money(line.totalCAD, 'CAD', 0)),
   ];
 
@@ -696,28 +722,19 @@ function FinalBlock({ quote, result: r }) {
     h('div', { className: 'fdRows' },
       h(Row, { label: 'Per MT', value: perTonne }),
       h(Row, { label: 'Whole shipment', value: whole }),
-      h(Row, { label: 'Margin', value: pct(f.marginPct) }),
       h(Row, { label: 'Estimated earnings per MT', value: money(f.earningsPerTonneCAD) }),
-      h(Row, { label: 'Estimated earnings', value: money(f.earningsTotalCAD, 'CAD', 0), total: true })),
-    f.source === 'target' && h('p', { className: 'fdHolds' },
-      `No final price entered, so this uses the lowest price at your ${pctSetting(r.targetMarginPct)} target margin.`));
+      h(Row, { label: 'Estimated earnings', value: money(f.earningsTotalCAD, 'CAD', 0), total: true })));
 }
 
 function QuoteSummary({ quote, result: r, onSave, saving }) {
   const ready = r.landedPerTonneCAD !== null && r.quantity_t > 0;
   const issues = r.issues.filter((i) => i.code !== 'margin');
-  let verdict = null;
-  if (ready && r.sale) {
-    const s = r.sale;
-    if (s.profitPerTonneCAD < 0) verdict = ['bad', `Loses ${money(-s.profitPerTonneCAD)} per metric tonne. Do not send this price.`];
-    else if (s.belowFloor) verdict = ['bad', `Below your ${pctSetting(r.minMarginPct)} floor. Raise the price to at least ${money(quote.saleCurrency === 'USD' ? r.floorPricePerTonneUSD : r.floorPricePerTonneCAD, quote.saleCurrency)}.`];
-    else if (s.belowTarget) verdict = ['warn', `Clears the floor but misses the ${pctSetting(r.targetMarginPct)} target.`];
-    else verdict = ['good', `Meets the ${pctSetting(r.targetMarginPct)} target.`];
-  }
+  const customer = String(quote.buyer || '').trim();
+  const losing = ready && r.final && r.final.earningsPerTonneCAD < 0;
   return h('section', { className: 'card fdSummary' },
-    h('div', { className: 'cardTitle' }, h('h3', null, 'Quote summary'), h('span', { className: 'badge' }, quote.reference || 'Draft')),
+    h('div', { className: 'cardTitle' }, h('h3', null, 'Quote summary'), quote.reference && h('span', { className: 'badge' }, quote.reference)),
     !ready
-      ? h('p', { className: 'fdSummaryEmpty' }, 'Enter a quantity and purchase price, then add charges. The landed cost and the lowest safe price appear here.')
+      ? h('p', { className: 'fdSummaryEmpty' }, 'Enter a quantity and purchase price, then add charges. The landed cost appears here.')
       : h(React.Fragment, null,
         h('div', { className: 'fdRows' },
           h(Row, { label: 'Quantity', value: tonnes(r.quantity_t) }),
@@ -726,22 +743,20 @@ function QuoteSummary({ quote, result: r, onSave, saving }) {
           h(Row, { label: 'Landed cost per MT', value: money(r.landedPerTonneCAD), total: true }),
           h(Row, { label: 'Landed cost, whole shipment', value: money(r.landedTotalCAD, 'CAD', 0) })),
         r.saleBasedAt && h('p', { className: 'fdHolds' },
-          `Includes ${pctSetting(r.saleBasedPct)} of the sale price (commission), worked out at the ${r.saleBasedAt} price. The target and floor prices cover it.`),
-        h('div', { className: 'fdFigure' },
-          h('small', null, `Lowest price at ${pctSetting(r.targetMarginPct)} margin`),
-          h('strong', null, money(r.targetPricePerTonneCAD), h('span', null, ' /MT')),
-          r.targetPricePerTonneUSD !== null && h('em', null, `${money(r.targetPricePerTonneUSD, 'USD')} per MT at ${r.usdcad}`)),
-        h('div', { className: 'fdRows' },
-          h(Row, { label: `Floor at ${pctSetting(r.minMarginPct)} margin`, value: `${money(r.floorPricePerTonneCAD)}${r.floorPricePerTonneUSD !== null ? ` (${money(r.floorPricePerTonneUSD, 'USD')})` : ''}` })),
-        r.final && h(FinalBlock, { quote, result: r }),
-        verdict && h('div', { className: `fdVerdict ${verdict[0]}` }, verdict[1]),
+          `Includes ${pctSetting(r.saleBasedPct)} of the final price as commission.`),
+        r.final
+          ? h(FinalBlock, { quote, result: r })
+          : h('div', { className: 'fdFinal fdNoPrint' },
+            h('div', { className: 'fdFinalTitle' }, customer ? `Final price for ${customer}` : 'Final price'),
+            h('p', { className: 'fdHolds' }, 'Enter a final price per MT to see the final price and estimated earnings.')),
+        losing && h('div', { className: 'fdVerdict bad' }, `Loses ${money(-r.final.earningsPerTonneCAD)} per metric tonne. Do not send this price.`),
         h('p', { className: 'fdHolds' }, r.validUntil
           ? h(React.Fragment, null, 'Holds until ', h('b', null, formatDate(r.validUntil)), ', when the first rate used expires.')
           : quote.lines.some((l) => l.rateId) ? 'None of the rates used state an end date. Confirm them before sending.' : null)),
     issues.length > 0 && h('ul', { className: 'fdIssues' }, issues.map((i, k) => h('li', { key: k, className: i.level }, i.message))),
     h('div', { className: 'fdSummaryActions' },
       h(Button, { kind: 'primary', icon: Check, onClick: onSave, disabled: saving || r.hasInputErrors }, saving ? 'Saving…' : 'Save quote')),
-    h('p', { className: 'fdFine' }, 'Margin is gross margin on the sale price. Railcar, container and truckload charges count whole units, so a part-filled car costs a full car.'));
+    h('p', { className: 'fdFine' }, 'Railcar, container and truckload charges count whole units, so a part-filled car costs a full car.'));
 }
 
 // ------------------------------------------------------------------ rate memory
@@ -941,13 +956,6 @@ function RatePicker({ lanes, quote, onAdd, onClose }) {
 
 // ------------------------------------------------------------------ saved quotes
 
-function marginBadge(q, f = finalOf(q)) {
-  if (!f) return null;
-  if (!f.entered) return h('span', { className: 'badge' }, `${pct(f.marginPct)} target`);
-  const bad = q.belowFloor || f.marginPct < 0;
-  return h('span', { className: bad ? 'badge bad' : 'badge good' }, `${pct(f.marginPct)}${q.belowFloor ? ', below floor' : ''}`);
-}
-
 function QuotesView({ quotes, onOpen }) {
   const [query, setQuery] = useState('');
   const visible = quotes.filter((q) => !query.trim() || [q.reference, q.buyer, q.commodity, q.grade, q.createdBy].join(' ').toLowerCase().includes(query.trim().toLowerCase()));
@@ -959,7 +967,7 @@ function QuotesView({ quotes, onOpen }) {
     visible.length
       ? h('div', { className: 'tableWrap' },
         h('table', null,
-          h('thead', null, h('tr', null, ['Quote date', 'Reference', 'Customer', 'Commodity', 'Quantity', 'Landed /MT', 'Final /MT', 'Margin', 'Est. earnings', 'Holds until'].map((c) => h('th', { key: c, className: ['Quantity', 'Landed /MT', 'Final /MT', 'Est. earnings'].includes(c) ? 'fdNum' : undefined }, c)))),
+          h('thead', null, h('tr', null, ['Quote date', 'Reference', 'Customer', 'Commodity', 'Quantity', 'Landed /MT', 'Final /MT', 'Est. earnings', 'Holds until'].map((c) => h('th', { key: c, className: ['Quantity', 'Landed /MT', 'Final /MT', 'Est. earnings'].includes(c) ? 'fdNum' : undefined }, c)))),
           h('tbody', null, visible.map((q) => { const f = finalOf(q); return h('tr', { key: q.id, tabIndex: 0, onClick: () => onOpen(q), onKeyDown: (e) => { if (e.key === 'Enter') onOpen(q); } },
             h('td', null, formatDate(q.quoteDate), h('small', null, `by ${q.createdBy}`)),
             h('td', null, h('b', null, q.reference || 'No reference')),
@@ -967,8 +975,7 @@ function QuotesView({ quotes, onOpen }) {
             h('td', null, q.commodity, q.grade && h('small', null, q.grade)),
             h('td', { className: 'fdNum' }, tonnes(q.quantity_t)),
             h('td', { className: 'fdNum' }, money(q.landedPerTonneCAD)),
-            h('td', { className: 'fdNum' }, f && money(f.perTonne), f && !f.entered && h('small', null, 'at target')),
-            h('td', null, marginBadge(q, f)),
+            h('td', { className: 'fdNum' }, f && money(f.perTonne)),
             h('td', { className: 'fdNum' }, f && money(f.earnings, 'CAD', 0)),
             h('td', null, q.validUntil && h(Validity, { validUntil: q.validUntil }))); }))))
       : h(Empty, { label: quotes.length ? 'No saved quotes match that search.' : 'No saved quotes yet. Build one under Landed cost and press Save quote.' }));
@@ -983,9 +990,8 @@ function QuoteDrawer({ summary: q, onClose, onLoad, onDelete }) {
         q.commodity && h('div', { className: 'businessTag' }, [q.commodity, q.grade].filter(Boolean).join(', ')),
         h('div', { className: 'detailGrid' },
           [['Customer', q.buyer || 'Not set'], ['Quote date', formatDate(q.quoteDate)], ['Quantity', tonnes(q.quantity_t)],
-            ['Landed cost per MT', money(q.landedPerTonneCAD)], ['Lowest price at target', money(q.targetPricePerTonneCAD)],
-            ['Final price per MT', f ? `${money(f.perTonne)}${f.entered ? '' : ' (at target)'}` : 'Not set'],
-            ['Margin', f ? `${pct(f.marginPct)}${f.entered && q.belowFloor ? ', below floor' : ''}` : 'Not set'],
+            ['Landed cost per MT', money(q.landedPerTonneCAD)],
+            ['Final price per MT', f ? money(f.perTonne) : 'Not set'],
             ['Estimated earnings', f ? money(f.earnings, 'CAD', 0) : 'Not set'],
             ['Holds until', q.validUntil ? formatDate(q.validUntil) : 'No end date'], ['Saved by', q.createdBy]]
             .map(([k, v]) => h('div', { key: k }, h('small', null, k), h('strong', null, v)))),

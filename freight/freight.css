@@ -139,9 +139,13 @@
 .fdNewLink{margin:0 12px 12px}
 }
 
-/* ---------- Print (only while the Freight Desk prints a quote) ---------- */
+/* ---------- Print (only while the Freight Desk prints a quote) ----------
+   Not limited to @media print: while printing, the page is also laid out this way
+   on screen so the sheet can be measured and fitted on one page (PAGE_FIT). */
 .fdPrintHead,.fdPrintOnly{display:none}
-@media print{body.fdPrinting{background:#fff}
+body.fdPrinting{background:#fff}
+body.fdPrinting .fd{margin:0 auto}
+body.fdPrinting .fd .formGrid.fdGrid3{grid-template-columns:1fr 1fr}
 body.fdPrinting .fd{padding:12mm 12mm 10mm;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 body.fdPrinting .fdPrintHead{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding-bottom:9px;margin-bottom:16px;border-bottom:1px solid var(--line)}
 body.fdPrinting .fdPrintHead b{font-size:17px;color:#16263a}
@@ -163,7 +167,8 @@ body.fdPrinting .fdChargesCard{grid-column:1/-1}
 body.fdPrinting .fd .dataCard,body.fdPrinting .fd .tableWrap{overflow:visible}
 body.fdPrinting .fd table{min-width:0}
 body.fdPrinting .fd tr{break-inside:avoid}
+/* Tighter rows on paper, so a long quote needs less shrinking to fit the page. */
+body.fdPrinting .fd .tableWrap td{padding-top:6px;padding-bottom:6px}
 body.fdPrinting .fdSummary{position:static}
 body.fdPrinting .card{box-shadow:none}
 body.fdPrinting .fd input,body.fdPrinting .fd select{border:0;background:transparent;padding-left:0}
-}
