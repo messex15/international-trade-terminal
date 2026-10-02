@@ -212,3 +212,12 @@ test("a losing price shows negative earnings", () => {
 test("no final price until there is a cost to price from", () => {
   assert.equal(computeQuote(deal([loading], { purchasePrice: "" })).final, null);
 });
+
+test("labour charges count like any other charge, and a blank labour row is left out", () => {
+  const labour = (amount, basis = "per_tonne") => ({ rateId: null, standard: true, type: "labour", basis, amount, currency: "CAD", capacity_t: 25 });
+  near(computeQuote(deal([labour(6)])).landedPerTonneCAD, 506);
+  near(computeQuote(deal([labour(300, "per_container")])).landedPerTonneCAD, 500 + (4 * 300) / 100); // 100 MT in 25 MT containers
+  const blank = computeQuote(deal([labour("")]));
+  assert.equal(blank.hasInputErrors, false);
+  near(blank.landedPerTonneCAD, 500);
+});

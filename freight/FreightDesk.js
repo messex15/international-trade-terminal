@@ -76,7 +76,7 @@ function Change({ value }) {
 
 const DRAFT_KEY = 'ainu-freight-draft-v1';
 const DEFAULT_BASIS = {
-  rail: 'per_car', truck: 'per_truckload', loading: 'per_tonne', transload: 'per_tonne', port: 'per_tonne',
+  rail: 'per_car', truck: 'per_truckload', loading: 'per_tonne', transload: 'per_tonne', labour: 'per_tonne', port: 'per_tonne',
   ocean: 'per_container', inspection: 'per_shipment', insurance: 'percent_of_value', commission: 'percent_of_sale', other: 'per_tonne',
 };
 // Every quote has these rows ready to fill in. Left blank, a row is not part of
@@ -84,6 +84,7 @@ const DEFAULT_BASIS = {
 // memory takes over the blank row.
 const STANDARD_LINES = [
   { type: 'transload', currency: 'CAD' },
+  { type: 'labour', currency: 'CAD' },
   { type: 'ocean', currency: 'USD' },
   { type: 'insurance', currency: 'CAD' },
   { type: 'commission', currency: 'CAD' },
@@ -92,8 +93,17 @@ function standardLine({ type, currency }) {
   return { rateId: null, standard: true, type, provider: '', description: '', basis: DEFAULT_BASIS[type], amount: '', currency, capacity_t: '' };
 }
 /** Adds a blank standard row for each standard charge the quote does not have yet. */
+// A missing row goes in its standard place: before the next standard charge the
+// quote already has (so Labour charges lands after Transloading on older quotes).
 function withStandardLines(lines = []) {
-  return [...lines, ...STANDARD_LINES.filter((s) => !lines.some((l) => l.type === s.type)).map(standardLine)];
+  const out = [...lines];
+  STANDARD_LINES.forEach((s, k) => {
+    if (out.some((l) => l.type === s.type)) return;
+    const later = STANDARD_LINES.slice(k + 1).map((x) => x.type);
+    const at = out.findIndex((l) => later.includes(l.type));
+    out.splice(at < 0 ? out.length : at, 0, standardLine(s));
+  });
+  return out;
 }
 const COMMODITIES = ['Yellow peas', 'Green peas', 'Red lentils', 'Green lentils', 'Fava beans', 'Chickpeas', 'Canola', 'Flax seed', 'Mustard seed', 'Durum', 'Oats'];
 
@@ -628,7 +638,7 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
         line.standard
           ? h('span', { className: 'fdLineType' }, typeName)
           : h('select', { value: line.type, onChange: setLine(i, 'type'), 'aria-label': 'Charge type' }, Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v))),
-        field('description', { placeholder: line.standard ? `${typeName} by (optional)` : 'Charged by or what it is', maxLength: 120, 'aria-label': `${typeName} description` }),
+        field('description', { placeholder: line.standard ? 'Charged by (optional)' : 'Charged by or what it is', maxLength: 120, 'aria-label': `${typeName} description` }),
         field('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: isPercent ? '%' : 'Amount', 'aria-label': `${typeName} amount` }),
         h('select', { value: isPercent ? 'CAD' : line.currency, onChange: setLine(i, 'currency'), disabled: isPercent, 'aria-label': `${typeName} currency` }, h('option', null, 'CAD'), h('option', null, 'USD')),
         h('select', { value: line.basis, onChange: setLine(i, 'basis'), 'aria-label': `${typeName} billed` }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label))),

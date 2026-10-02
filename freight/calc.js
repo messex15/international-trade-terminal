@@ -8,6 +8,7 @@ export const RATE_TYPES = {
   truck: "Truck or drayage",
   loading: "Loading and elevation",
   transload: "Transloading",
+  labour: "Labour charges",
   port: "Port and terminal",
   ocean: "Ocean freight",
   inspection: "Inspection and documents",

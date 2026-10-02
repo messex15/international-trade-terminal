@@ -188,6 +188,7 @@ await step("grade, customer, standard rows and a commission on the sale price ar
     purchasePrice: 500, purchaseCurrency: "CAD", targetMarginPct: 8, minMarginPct: 4,
     lines: [
       { ...blank("transload", "per_tonne"), amount: 20 },
+      blank("labour", "per_tonne"),
       blank("ocean", "per_container", "USD"),
       blank("insurance", "percent_of_value"),
       { ...blank("commission", "percent_of_sale"), amount: 2 },
@@ -197,7 +198,7 @@ await step("grade, customer, standard rows and a commission on the sale price ar
   assert.equal(res.status, 201, await res.clone().text());
   const { quote } = await res.json();
   assert.equal(quote.inputs.grade, "No. 2 or better");
-  assert.equal(quote.inputs.lines.filter((l) => l.standard).length, 4, "blank standard rows are kept with the quote");
+  assert.equal(quote.inputs.lines.filter((l) => l.standard).length, 5, "blank standard rows are kept with the quote");
   assert.ok(Math.abs(quote.result.targetPricePerTonneCAD - 520 / 0.9) < 1e-9, "target price covers the 2% commission");
   const { quotes } = await (await req("/api/freight/quotes", { cookie: MEMBER })).json();
   assert.equal(quotes.find((q) => q.id === quote.id).grade, "No. 2 or better");
