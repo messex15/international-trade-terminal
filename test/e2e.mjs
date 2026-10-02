@@ -107,6 +107,20 @@ await step("clients cannot manage links", async () => {
   assert.equal(make.status, 403);
 });
 
+await step("the client page never offers link management, even in a member's browser", async () => {
+  const both = `${MEMBER}; ${client.cookie}`;
+  const onClientPage = await (await req("/api/freight/session?view=client", { cookie: both })).json();
+  assert.equal(onClientPage.kind, "link", "a client link wins on the client page");
+  assert.equal(onClientPage.label, "E2E client");
+  assert.equal(onClientPage.canManageAccess, false);
+  const memberOnClientPage = await (await req("/api/freight/session?view=client", { cookie: MEMBER })).json();
+  assert.equal(memberOnClientPage.kind, "member");
+  assert.equal(memberOnClientPage.canManageAccess, false);
+  const inPortal = await (await req("/api/freight/session", { cookie: both })).json();
+  assert.equal(inPortal.kind, "member");
+  assert.equal(inPortal.canManageAccess, true);
+});
+
 await raceStep("five simultaneous redeems of one link: exactly one wins", async () => {
   const res = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label: "Race test" } });
   const token = (await res.json()).url.split("#")[1];

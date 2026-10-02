@@ -1,5 +1,8 @@
 // GET    /api/freight/session  -> who is using the desk (portal member or client link)
 //                                and, for clients, renews their sign-in
+//        ?view=client          -> asked by the client page (/freight/): a client link
+//                                wins over a portal sign-in, and access management is
+//                                never offered there
 // DELETE /api/freight/session  -> sign a client-link browser out
 import { assertSameOrigin, json, requireSession, route, sessionSecret } from "../lib/http.mjs";
 import { SESSION_TTL_SECONDS, clearedSessionCookie, sessionCookie, signSession } from "../lib/session.mjs";
@@ -9,7 +12,8 @@ export default route(async (req) => {
     assertSameOrigin(req);
     return json({ ok: true }, 200, { "set-cookie": clearedSessionCookie() });
   }
-  const session = await requireSession(req, { preferMember: true });
+  const clientView = new URL(req.url).searchParams.get("view") === "client";
+  const session = await requireSession(req, { preferMember: !clientView });
   const headers = {};
   if (session.kind === "link") {
     // Sliding renewal: every visit restarts the cookie lifetime, so a client
@@ -21,7 +25,7 @@ export default route(async (req) => {
   return json({
     kind: session.kind,
     label: session.label,
-    canManageAccess: session.kind === "member",
+    canManageAccess: session.kind === "member" && !clientView,
   }, 200, headers);
 });
 

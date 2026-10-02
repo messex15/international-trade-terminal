@@ -21,7 +21,9 @@ WHO CAN USE IT
                      existing Netlify Identity sign-in and the member role.
 /freight/            Clients, through a single-use link. Same desk, on its
                      own page, without the rest of the portal.
-Staff manage client links under Freight Desk > Client access.
+Staff manage client links under Freight Desk > Client access, in the portal
+only. The /freight/ page never shows Client access, even in a browser that is
+also signed in to the portal, and the link APIs accept portal members only.
 
 CLIENT LINKS
 1. Freight Desk > Client access > enter who it is for > Create link.

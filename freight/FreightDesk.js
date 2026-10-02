@@ -228,7 +228,9 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
 
   const load = useCallback(async () => {
     try {
-      const [s, r, q] = await Promise.all([api('session'), api('rates'), api('quotes')]);
+      // The client page (/freight/) asks for the client's view of the session, so
+      // a client link always wins there, even in a browser also signed in to the portal.
+      const [s, r, q] = await Promise.all([api(variant === 'standalone' ? 'session?view=client' : 'session'), api('rates'), api('quotes')]);
       setSession(s);
       onSession?.(s);
       setRates(r.rates);
@@ -237,13 +239,16 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     } catch (err) {
       setState({ status: 'error', error: err.message });
     }
-  }, [api, onSession]);
+  }, [api, onSession, variant]);
   useEffect(() => { load(); }, [load]);
 
   const lanes = useMemo(() => groupLanes(rates, { includeArchived: true }), [rates]);
   const activeLanes = useMemo(() => lanes.filter((l) => !l.latest.archivedAt), [lanes]);
   const result = useMemo(() => assess(quote, rates), [quote, rates]);
-  const canManageAccess = Boolean(session?.canManageAccess);
+  // Client access only ever appears inside the portal, for a portal member. The
+  // client page never offers it, whoever is signed in.
+  const canManageAccess = variant === 'portal' && session?.kind === 'member' && Boolean(session?.canManageAccess);
+  const view = tab === 'access' && !canManageAccess ? 'quote' : tab;
 
   const replaceRate = (rate) => setRates((all) => all.map((r) => (r.id === rate.id ? rate : r)));
   const addLine = (line) => setQuote((q) => ({ ...q, lines: [...q.lines, line] }));
@@ -337,7 +342,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     ],
     quotes: [h(Button, { key: 'ref', icon: RefreshCw, onClick: () => api('quotes').then((d) => setQuotes(d.quotes)).catch((e) => notify(e.message, true)) }, 'Refresh')],
     access: [],
-  }[tab];
+  }[view];
 
   const counts = { rates: activeLanes.length, quotes: quotes.length };
   const tabs = TABS.filter(([id]) => id !== 'access' || canManageAccess);
@@ -347,13 +352,13 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   else if (state.status === 'error') {
     body = h('div', { className: 'notice' }, h(TriangleAlert, { size: 18 }),
       h('span', null, state.error, ' ', h('button', { type: 'button', className: 'fdLinkButton', onClick: () => { setState({ status: 'loading', error: '' }); load(); } }, 'Try again')));
-  } else if (tab === 'quote') {
+  } else if (view === 'quote') {
     body = h(QuoteView, { quote, setQuote, result, onPick: () => setPicker(true), onSave: saveQuote, saving, api, notify, rates });
-  } else if (tab === 'rates') {
+  } else if (view === 'rates') {
     body = h(RatesView, { lanes, onOpen: setOpenLane, onCapture: () => setRateEditor({}) });
-  } else if (tab === 'quotes') {
+  } else if (view === 'quotes') {
     body = h(QuotesView, { quotes, onOpen: setOpenQuote });
-  } else {
+  } else if (view === 'access' && canManageAccess) {
     body = h(AccessView, { api, notify });
   }
 
@@ -361,11 +366,11 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
 
   return h('div', { className: 'fd', 'data-variant': variant },
     h('div', { className: 'pageHead' },
-      h('div', null, h('h1', null, 'Freight Desk'), h('p', null, SUBTITLES[tab])),
+      h('div', null, h('h1', null, 'Freight Desk'), h('p', null, SUBTITLES[view])),
       state.status === 'ready' && headActions.length > 0 && h('div', { className: 'headActions' }, ...headActions)),
     h('div', { className: 'fdTabs', role: 'tablist', 'aria-label': 'Freight Desk sections' },
       tabs.map(([id, label, Icon]) => h('button', {
-        key: id, type: 'button', role: 'tab', 'aria-selected': tab === id, className: tab === id ? 'active' : '', onClick: () => setTab(id),
+        key: id, type: 'button', role: 'tab', 'aria-selected': view === id, className: view === id ? 'active' : '', onClick: () => setTab(id),
       }, h(Icon, { size: 15 }), h('span', null, label), counts[id] ? h('span', { className: 'fdCount' }, counts[id]) : null))),
     body,
     rateEditor && h(RateEditor, {
