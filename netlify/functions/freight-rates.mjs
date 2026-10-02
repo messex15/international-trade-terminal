@@ -26,12 +26,15 @@ import {
 const DOC_KEY = "rates.json";
 const EMPTY = { version: 1, rates: [] };
 const EDITABLE = [
-  "type", "provider", "origin", "destination", "commodity", "basis",
+  "type", "chargeName", "provider", "origin", "destination", "commodity", "basis",
   "amount", "currency", "capacity_t", "effectiveFrom", "validUntil", "source", "notes",
 ];
 
 function validateRate(body) {
   if (!RATE_TYPES[body.type]) throw new HttpError(400, "Choose a charge type.");
+  // "Other charge" needs a name (Fumigation, Bagging...); other types ignore it.
+  const chargeName = body.type === "other" ? cleanText(body.chargeName, 60) : "";
+  if (body.type === "other" && !chargeName) throw new HttpError(400, "Say what the other charge is, such as Fumigation or Bagging.");
   if (!BASES[body.basis]) throw new HttpError(400, "Choose how the charge is billed.");
   const provider = cleanText(body.provider, 80);
   if (!provider) throw new HttpError(400, "Enter who is charging this (carrier, elevator, terminal).");
@@ -52,6 +55,7 @@ function validateRate(body) {
 
   return {
     type: body.type,
+    chargeName,
     provider,
     origin: cleanText(body.origin, 80),
     destination: cleanText(body.destination, 80),

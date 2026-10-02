@@ -37,6 +37,8 @@ function cleanLine(line, i) {
     // blank; it is then not part of the quote.
     standard: line.standard === true,
     type: line.type,
+    // Only "Other charge" lines carry a name of their own.
+    chargeName: line.type === "other" ? cleanText(line.chargeName, 60) : "",
     provider: cleanText(line.provider, 80),
     description: cleanText(line.description, 120),
     origin: cleanText(line.origin, 80),

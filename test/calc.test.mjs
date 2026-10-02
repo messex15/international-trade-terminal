@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { computeQuote, groupLanes, laneKey, lineCost, percentChange } from "../freight/calc.js";
+import { chargeLabel, computeQuote, groupLanes, laneKey, lineCost, lineName, percentChange } from "../freight/calc.js";
 
 const near = (actual, expected, eps = 1e-6) => assert.ok(Math.abs(actual - expected) < eps, `${actual} != ${expected}`);
 
@@ -220,4 +220,26 @@ test("labour charges count like any other charge, and a blank labour row is left
   const blank = computeQuote(deal([labour("")]));
   assert.equal(blank.hasInputErrors, false);
   near(blank.landedPerTonneCAD, 500);
+});
+
+// ---------------------------------------------------------------- named "Other charge"
+
+test("an Other charge is called by the name given to it", () => {
+  assert.equal(chargeLabel({ type: "other", chargeName: " Fumigation " }), "Fumigation");
+  assert.equal(chargeLabel({ type: "other", chargeName: "" }), "Other charge");
+  assert.equal(chargeLabel({ type: "rail", chargeName: "Fumigation" }), "Rail freight", "only Other charges use a name");
+  assert.equal(lineName({ type: "other", chargeName: "Fumigation", provider: "SGS" }), "Fumigation (SGS)");
+});
+
+test("differently named Other charges from the same provider are separate lanes", () => {
+  const base = { type: "other", provider: "Delta Terminal", origin: "Delta, BC", destination: "", commodity: "", basis: "per_tonne" };
+  assert.notEqual(laneKey({ ...base, chargeName: "Fumigation" }), laneKey({ ...base, chargeName: "Bagging" }));
+  assert.equal(laneKey({ ...base, chargeName: "Fumigation" }), laneKey({ ...base, chargeName: "  fumigation " }));
+  const rail = { ...base, type: "rail" };
+  assert.equal(laneKey({ ...rail, chargeName: "x" }), laneKey(rail), "the name is ignored for other types");
+});
+
+test("a named Other charge shows its name in quote warnings", () => {
+  const q = computeQuote(deal([{ rateId: null, type: "other", chargeName: "Fumigation", provider: "", description: "", basis: "per_tonne", amount: "", currency: "CAD" }]));
+  assert.ok(q.issues.some((i) => i.message.startsWith("Fumigation: Enter an amount")), JSON.stringify(q.issues));
 });

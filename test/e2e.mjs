@@ -225,6 +225,33 @@ await step("the customer list: add, refuse duplicates, update, list A to Z, remo
   assert.equal((await req(`/api/freight/customers/${customer.id}`, { method: "DELETE", cookie: MEMBER })).status, 404);
 });
 
+await step("an Other charge needs a name in rate memory, and each name keeps its own history", async () => {
+  const other = { type: "other", provider: `Delta Terminal ${RUN}`, origin: "Delta, BC", basis: "per_tonne", currency: "CAD", effectiveFrom: "2026-10-01" };
+  assert.equal((await req("/api/freight/rates", { method: "POST", cookie: MEMBER, body: { ...other, amount: 4 } })).status, 400, "no name");
+  const fumigation = await (await req("/api/freight/rates", { method: "POST", cookie: MEMBER, body: { ...other, chargeName: "Fumigation", amount: 4 } })).json();
+  assert.equal(fumigation.rate.chargeName, "Fumigation");
+  const bagging = await (await req("/api/freight/rates", { method: "POST", cookie: MEMBER, body: { ...other, chargeName: "Bagging", amount: 22 } })).json();
+  assert.equal(bagging.previous, null, "bagging does not replace fumigation");
+  const again = await (await req("/api/freight/rates", { method: "POST", cookie: MEMBER, body: { ...other, chargeName: "fumigation", amount: 5, effectiveFrom: "2026-10-02" } })).json();
+  assert.equal(again.previous.id, fumigation.rate.id, "same name, same lane");
+  assert.ok(Math.abs(again.changePct - 25) < 1e-9);
+  const rail = await (await req("/api/freight/rates", { method: "POST", cookie: MEMBER, body: { ...other, type: "rail", chargeName: "ignored", amount: 1 } })).json();
+  assert.equal(rail.rate.chargeName, "", "only Other charges keep a name");
+  for (const r of [fumigation.rate, bagging.rate, again.rate, rail.rate]) {
+    await req(`/api/freight/rates/${r.id}`, { method: "PATCH", cookie: MEMBER, body: { archived: true } });
+  }
+  const q = await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body: {
+    reference: `Q-OTHER-${RUN}`, quantity_t: 100, quoteDate: "2026-10-02", purchasePrice: 500, purchaseCurrency: "CAD",
+    lines: [
+      { rateId: null, type: "other", chargeName: "Phytosanitary certificate", basis: "per_shipment", amount: 450, currency: "CAD" },
+      { rateId: null, type: "loading", chargeName: "stray", basis: "per_tonne", amount: 10, currency: "CAD" },
+    ] } });
+  assert.equal(q.status, 201, await q.clone().text());
+  const { quote } = await q.json();
+  assert.deepEqual(quote.inputs.lines.map((l) => l.chargeName), ["Phytosanitary certificate", ""]);
+  assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+});
+
 await step("the member's link list shows the client link in use; revoking ends it", async () => {
   const { links } = await (await req("/api/freight/access-links", { cookie: MEMBER })).json();
   const mine = links.find((l) => l.id === client.linkId);

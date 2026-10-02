@@ -65,9 +65,19 @@ export function daysBetween(a, b) {
   return Math.round((Date.parse(b) - Date.parse(a)) / DAY_MS);
 }
 
-/** Rates on the same lane replace each other over time. */
+/** What a charge is called: its type, or for "Other charge" the name the user gave it. */
+export function chargeLabel(item) {
+  const name = item?.type === "other" ? String(item.chargeName ?? "").trim() : "";
+  return name || RATE_TYPES[item?.type] || "Charge";
+}
+
+/**
+ * Rates on the same lane replace each other over time. "Other charge" rates
+ * also need the same name, so a terminal's fumigation and bagging rates stay
+ * separate.
+ */
 export function laneKey(rate) {
-  return [rate.type, rate.provider, rate.origin, rate.destination, rate.commodity, rate.basis]
+  return [rate.type, rate.provider, rate.origin, rate.destination, rate.commodity, rate.basis, rate.type === "other" ? rate.chargeName : ""]
     .map((part) => String(part ?? "").trim().toLowerCase().replace(/\s+/g, " "))
     .join("|");
 }
@@ -355,7 +365,7 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
 }
 
 export function lineName(line) {
-  const type = RATE_TYPES[line.type] || "Charge";
+  const type = chargeLabel(line);
   const who = line.provider || line.description;
   return who ? `${type} (${who})` : type;
 }

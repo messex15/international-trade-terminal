@@ -25,6 +25,10 @@ per-unit prices are in metric tonnes, shown as MT.
   and its cost per MT is shown at the offered price, or at the target
   price when no offer is entered.
 - Deal details include the customer and the product grade.
+- "Other charge": give it a name (Fumigation, Bagging, Demurrage...) and the
+  name is shown in place of "Other charge" on the quote, the PDF and in rate
+  memory. In rate memory the name is required, and each name keeps its own
+  rate history.
 - Final price and estimated earnings: the final price is the price entered on
   the quote, or the lowest price at the target margin when none is entered.
   Estimated earnings = final price - landed cost (all charges, commission

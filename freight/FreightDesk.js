@@ -11,7 +11,7 @@ import {
   Link2, PackageSearch, PencilLine, Plus, Printer, RefreshCw, Search, Ship, Trash2, TriangleAlert, Users, X,
 } from 'lucide-react';
 import {
-  BASES, RATE_TYPES, compareRatesNewestFirst, computeQuote, daysBetween, formatDate,
+  BASES, RATE_TYPES, chargeLabel, compareRatesNewestFirst, computeQuote, daysBetween, formatDate,
   groupLanes, isUnusedLine, isoToday, laneKey, percentChange,
 } from './calc.js';
 
@@ -51,6 +51,8 @@ function amountText(r) {
   return BASES[r.basis]?.percent ? `${Number(r.amount)}%` : money(Number(r.amount), r.currency);
 }
 const rateText = (r) => `${amountText(r)} ${basisText(r)}`;
+/** Charge label inside a sentence: types in lower case, a user's own charge name as typed. */
+const labelInSentence = (r) => (r.type === 'other' && String(r.chargeName || '').trim() ? chargeLabel(r) : chargeLabel(r).toLowerCase());
 function routeText(r) {
   if (r.origin && r.destination) return `${r.origin} to ${r.destination}`;
   return r.origin || r.destination || '';
@@ -133,13 +135,13 @@ function saveDraft(quote) {
 }
 function lineFromRate(r) {
   return {
-    rateId: r.id, type: r.type, provider: r.provider, description: '', origin: r.origin, destination: r.destination,
+    rateId: r.id, type: r.type, chargeName: r.chargeName || '', provider: r.provider, description: '', origin: r.origin, destination: r.destination,
     commodity: r.commodity, basis: r.basis, amount: r.amount, currency: r.currency, capacity_t: r.capacity_t,
     effectiveFrom: r.effectiveFrom, validUntil: r.validUntil, source: r.source,
   };
 }
 function oneOffLine() {
-  return { rateId: null, type: 'other', provider: '', description: '', basis: 'per_tonne', amount: '', currency: 'CAD', capacity_t: '' };
+  return { rateId: null, type: 'other', chargeName: '', provider: '', description: '', basis: 'per_tonne', amount: '', currency: 'CAD', capacity_t: '' };
 }
 const normName = (name) => String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const sortCustomers = (list) => [...list].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
@@ -171,7 +173,7 @@ function assess(quote, rates) {
       level: 'warning', code: 'newer', newerId: newer.id,
       message: `A newer rate is on file: ${rateText(newer)}, effective ${formatDate(newer.effectiveFrom)}${change !== null ? ` (${change > 0 ? '+' : ''}${change.toFixed(1)}%)` : ''}.`,
     });
-    result.issues.push({ level: 'warning', code: 'newer', message: `${RATE_TYPES[line.type]} (${line.provider}): a newer rate is on file.` });
+    result.issues.push({ level: 'warning', code: 'newer', message: `${chargeLabel(line)} (${line.provider}): a newer rate is on file.` });
   });
   return result;
 }
@@ -377,7 +379,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   }, [printJob]);
 
   function exportCsv() {
-    const cols = ['id', 'type', 'provider', 'origin', 'destination', 'commodity', 'basis', 'amount', 'currency', 'capacity_t', 'effectiveFrom', 'validUntil', 'source', 'notes', 'createdAt', 'createdBy', 'archivedAt'];
+    const cols = ['id', 'type', 'chargeName', 'provider', 'origin', 'destination', 'commodity', 'basis', 'amount', 'currency', 'capacity_t', 'effectiveFrom', 'validUntil', 'source', 'notes', 'createdAt', 'createdBy', 'archivedAt'];
     const cell = (v) => {
       const s = String(v ?? '');
       const safe = /^[=+\-@]/.test(s) ? `'${s}` : s; // stop spreadsheet formula injection
@@ -486,7 +488,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     }),
     lane && h(LaneDrawer, {
       lane, onClose: () => setOpenLane(null),
-      onAdd: (r) => { addLine(lineFromRate(r)); setOpenLane(null); setTab('quote'); notify(`Added ${RATE_TYPES[r.type].toLowerCase()} from ${r.provider} to the quote.`); },
+      onAdd: (r) => { addLine(lineFromRate(r)); setOpenLane(null); setTab('quote'); notify(`Added ${labelInSentence(r)} from ${r.provider} to the quote.`); },
       onEdit: (r) => { setOpenLane(null); setRateEditor({ rate: r }); },
       onArchive: setArchived,
     }),
@@ -504,6 +506,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     }),
     h('datalist', { id: 'fd-customers' }, customers.map((c) => h('option', { key: c.id, value: c.name }, [c.country, c.deliveryTerms].filter(Boolean).join(' · ')))),
     openQuote && h(QuoteDrawer, { summary: openQuote, onClose: () => setOpenQuote(null), onLoad: () => openSavedQuote(openQuote.id), onDelete: () => deleteSavedQuote(openQuote) }),
+    h('datalist', { id: 'fd-charge-names' }, [...new Set(rates.filter((r) => r.type === 'other').map((r) => String(r.chargeName || '').trim()).filter(Boolean))].sort().map((n) => h('option', { key: n, value: n }))),
     h('datalist', { id: 'fd-commodities' }, [...new Set([...COMMODITIES, ...rates.map((r) => r.commodity).filter(Boolean)])].map((c) => h('option', { key: c, value: c }))),
     toast && h('div', { className: `toast${toast.bad ? ' fdToastBad' : ''}`, role: 'status', key: toast.at }, toast.text));
 }
@@ -612,7 +615,7 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
 
   if (line.rateId) {
     return h('tr', null,
-      h('td', { className: 'fdWrap' }, h('b', null, line.provider), h('small', null, `${RATE_TYPES[line.type]}${routeText(line) ? `, ${routeText(line)}` : ''}`),
+      h('td', { className: 'fdWrap' }, h('b', null, line.provider), h('small', null, `${chargeLabel(line)}${routeText(line) ? `, ${routeText(line)}` : ''}`),
         h('small', null, `From rate memory, effective ${formatDate(line.effectiveFrom)}${line.source ? `. ${line.source}` : ''}`), flagList),
       h('td', null, h('b', null, amountText(line)), h('small', null, basisText(line)), units),
       ...computed, remove);
@@ -621,6 +624,8 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
   const isPercent = Boolean(BASES[line.basis]?.percent);
   const field = (key, props) => h('input', { value: line[key] ?? '', onChange: setLine(i, key), ...props });
   const typeName = RATE_TYPES[line.type];
+  const label = chargeLabel(line); // an Other charge shows the name typed for it
+  const isOther = line.type === 'other' && !line.standard;
   let note = 'One-off charge, not saved to rate memory.';
   if (line.unused) note = 'Not included. Enter an amount to add it to this quote.';
   else if (line.standard) note = 'Typed in for this quote, not saved to rate memory.';
@@ -629,16 +634,17 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
     h('td', { colSpan: 2, className: 'fdWrap' },
       // On paper the edit boxes would cut text off, so print the charge as text.
       h('div', { className: 'fdPrintOnly' },
-        h('b', null, line.description || typeName),
+        h('b', null, line.description || label),
         line.standard
-          ? line.description && h('small', null, typeName)
-          : h('small', null, `${typeName}, one-off charge`),
+          ? line.description && h('small', null, label)
+          : h('small', null, line.description ? `${label}, one-off charge` : 'One-off charge'),
         line.amount !== '' && line.amount !== null && h('small', null, rateText(line))),
       h('div', { className: 'fdLineEdit fdNoPrint' },
         line.standard
           ? h('span', { className: 'fdLineType' }, typeName)
           : h('select', { value: line.type, onChange: setLine(i, 'type'), 'aria-label': 'Charge type' }, Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v))),
-        field('description', { placeholder: line.standard ? 'Charged by (optional)' : 'Charged by or what it is', maxLength: 120, 'aria-label': `${typeName} description` }),
+        isOther && field('chargeName', { placeholder: 'Name of charge', maxLength: 60, list: 'fd-charge-names', title: 'What the charge is, such as Fumigation or Bagging', 'aria-label': 'Name of other charge' }),
+        field('description', { placeholder: line.standard ? 'Charged by (optional)' : isOther ? 'Charged by' : 'Charged by or what it is', maxLength: 120, 'aria-label': `${typeName} description` }),
         field('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: isPercent ? '%' : 'Amount', 'aria-label': `${typeName} amount` }),
         h('select', { value: isPercent ? 'CAD' : line.currency, onChange: setLine(i, 'currency'), disabled: isPercent, 'aria-label': `${typeName} currency` }, h('option', null, 'CAD'), h('option', null, 'USD')),
         h('select', { value: line.basis, onChange: setLine(i, 'basis'), 'aria-label': `${typeName} billed` }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label))),
@@ -722,7 +728,7 @@ function RatesView({ lanes, onOpen, onCapture }) {
     return lanes
       .filter(({ latest }) => (show === 'Archived' ? latest.archivedAt : !latest.archivedAt))
       .filter(({ latest }) => type === 'All' || latest.type === type)
-      .filter(({ latest }) => !q || [RATE_TYPES[latest.type], latest.provider, latest.origin, latest.destination, latest.commodity, latest.source, latest.notes].join(' ').toLowerCase().includes(q))
+      .filter(({ latest }) => !q || [chargeLabel(latest), RATE_TYPES[latest.type], latest.provider, latest.origin, latest.destination, latest.commodity, latest.source, latest.notes].join(' ').toLowerCase().includes(q))
       .sort((a, b) => compareRatesNewestFirst(a.latest, b.latest));
   }, [lanes, query, type, show]);
 
@@ -745,7 +751,7 @@ function RatesView({ lanes, onOpen, onCapture }) {
             const r = lane.latest;
             const earlier = lane.history.length - 1;
             return h('tr', { key: lane.key, tabIndex: 0, onClick: () => onOpen(lane.key), onKeyDown: (e) => { if (e.key === 'Enter') onOpen(lane.key); } },
-              h('td', null, h('b', null, r.provider), h('small', null, `${RATE_TYPES[r.type]}${earlier ? `, ${earlier} earlier` : ''}`)),
+              h('td', null, h('b', null, r.provider), h('small', null, `${chargeLabel(r)}${earlier ? `, ${earlier} earlier` : ''}`)),
               h('td', null, routeText(r)),
               h('td', null, r.commodity || 'Any'),
               h('td', { className: 'fdNum' }, h('b', null, amountText(r)), h('small', null, basisText(r))),
@@ -763,7 +769,7 @@ function LaneDrawer({ lane, onClose, onAdd, onEdit, onArchive }) {
   const r = lane.latest;
   return h(Overlay, { onClose },
     h('aside', { className: 'drawer' },
-      h(PanelHead, { kicker: RATE_TYPES[r.type], title: r.provider, onClose }),
+      h(PanelHead, { kicker: chargeLabel(r), title: r.provider, onClose }),
       h('div', { className: 'drawerBody' },
         r.commodity && h('div', { className: 'businessTag' }, r.commodity),
         h('div', { className: 'detailGrid' },
@@ -789,13 +795,13 @@ function LaneDrawer({ lane, onClose, onAdd, onEdit, onArchive }) {
           h('span', null, `Corrected ${r.revisions.length} time${r.revisions.length === 1 ? '' : 's'}. Previous values are kept in the rate's record.`)))));
 }
 
-const RATE_FIELDS = ['type', 'provider', 'commodity', 'origin', 'destination', 'amount', 'currency', 'basis', 'capacity_t', 'effectiveFrom', 'validUntil', 'source', 'notes'];
+const RATE_FIELDS = ['type', 'chargeName', 'provider', 'commodity', 'origin', 'destination', 'amount', 'currency', 'basis', 'capacity_t', 'effectiveFrom', 'validUntil', 'source', 'notes'];
 
 function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
   const editing = Boolean(initial?.id);
   const [form, setForm] = useState(() => (editing
     ? Object.fromEntries(RATE_FIELDS.map((k) => [k, initial[k] ?? '']))
-    : { type: 'rail', provider: '', commodity: '', origin: '', destination: '', amount: '', currency: 'CAD', basis: 'per_car', capacity_t: '', effectiveFrom: isoToday(), validUntil: '', source: '', notes: '' }));
+    : { type: 'rail', chargeName: '', provider: '', commodity: '', origin: '', destination: '', amount: '', currency: 'CAD', basis: 'per_car', capacity_t: '', effectiveFrom: isoToday(), validUntil: '', source: '', notes: '' }));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (key) => (e) => {
@@ -809,7 +815,7 @@ function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const body = { ...form, currency: BASES[form.basis]?.percent ? 'CAD' : form.currency };
+    const body = { ...form, chargeName: form.type === 'other' ? form.chargeName : '', currency: BASES[form.basis]?.percent ? 'CAD' : form.currency };
     try {
       if (editing) {
         const { rate } = await api(`rates/${initial.id}`, { method: 'PUT', body });
@@ -836,9 +842,11 @@ function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
   const input = (key, props = {}) => h('input', { value: form[key] ?? '', onChange: set(key), ...props });
   return h(Overlay, { centered: true, onClose },
     h('form', { className: 'modal fd', onSubmit: submit, noValidate: true },
-      h(PanelHead, { kicker: 'Rate memory', title: editing ? `Correct ${initial.provider} ${RATE_TYPES[initial.type].toLowerCase()}` : 'Capture a rate', onClose }),
+      h(PanelHead, { kicker: 'Rate memory', title: editing ? `Correct ${initial.provider} ${labelInSentence(initial)}` : 'Capture a rate', onClose }),
       h('div', { className: 'formGrid' },
         h(Field, { label: 'Charge type' }, h('select', { value: form.type, onChange: set('type'), autoFocus: true }, Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v)))),
+        form.type === 'other' && h(Field, { label: 'Name of charge', hint: 'What it is, so it is easy to find and reuse.' },
+          input('chargeName', { list: 'fd-charge-names', maxLength: 60, required: true, placeholder: 'Fumigation, bagging, demurrage' })),
         h(Field, { label: 'Charged by' }, input('provider', { list: 'fd-providers', maxLength: 80, placeholder: 'CN, Viterra, COSCO', required: true })),
         h(Field, { label: 'From' }, input('origin', { list: 'fd-places', maxLength: 80, placeholder: 'Shaunavon, SK' })),
         h(Field, { label: 'To' }, input('destination', { list: 'fd-places', maxLength: 80, placeholder: 'Vancouver, BC' })),
@@ -847,9 +855,9 @@ function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
         h(Field, { label: 'Amount' }, h('span', { className: 'fdCombo' },
           input('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', required: true }),
           h('select', { value: form.currency, onChange: set('currency'), disabled: Boolean(BASES[form.basis]?.percent), 'aria-label': 'Currency' }, h('option', null, 'CAD'), h('option', null, 'USD')))),
-        basis?.needsCapacity
-          ? h(Field, { label: `MT per ${basis.unit}`, hint: 'Metric tonnes it holds. Turns the rate into a cost per MT.' }, input('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any' }))
-          : h('span', { 'aria-hidden': true }),
+        basis?.needsCapacity && h(Field, { label: `MT per ${basis.unit}`, hint: 'Metric tonnes it holds. Turns the rate into a cost per MT.' }, input('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any' })),
+        // Keeps the dates on a row of their own in the two-column form.
+        (7 + (form.type === 'other' ? 1 : 0) + (basis?.needsCapacity ? 1 : 0)) % 2 === 1 && h('span', { 'aria-hidden': true }),
         h(Field, { label: 'Effective from' }, input('effectiveFrom', { type: 'date', required: true })),
         h(Field, { label: 'Valid until', hint: 'Offer or tariff expiry, if stated.' }, input('validUntil', { type: 'date' })),
         h(Field, { label: 'Source', className: 'fdSpan2' }, input('source', { maxLength: 200, placeholder: 'Email from CN rates desk, Sep 29' })),
@@ -870,7 +878,7 @@ function RatePicker({ lanes, quote, onAdd, onClose }) {
   const inQuote = new Set(quote.lines.map((l) => l.rateId).filter(Boolean));
   const rows = lanes.map((l) => l.latest)
     .filter((r) => scope === 'all' || !commodity || !r.commodity || r.commodity.toLowerCase() === commodity)
-    .filter((r) => !query.trim() || [RATE_TYPES[r.type], r.provider, r.origin, r.destination, r.commodity].join(' ').toLowerCase().includes(query.trim().toLowerCase()))
+    .filter((r) => !query.trim() || [chargeLabel(r), RATE_TYPES[r.type], r.provider, r.origin, r.destination, r.commodity].join(' ').toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => a.type.localeCompare(b.type) || a.provider.localeCompare(b.provider));
 
   let empty = 'Rate memory is empty. Capture rates under Rate memory first.';
@@ -890,7 +898,7 @@ function RatePicker({ lanes, quote, onAdd, onClose }) {
           h('table', { className: 'fdStatic' },
             h('thead', null, h('tr', null, ['Charged by', 'Route', 'Commodity', 'Rate', 'Valid until', ''].map((c, k) => h('th', { key: k, className: c === 'Rate' ? 'fdNum' : undefined }, c)))),
             h('tbody', null, rows.map((r) => h('tr', { key: r.id },
-              h('td', null, h('b', null, r.provider), h('small', null, RATE_TYPES[r.type])),
+              h('td', null, h('b', null, r.provider), h('small', null, chargeLabel(r))),
               h('td', null, routeText(r)),
               h('td', null, r.commodity || 'Any'),
               h('td', { className: 'fdNum' }, h('b', null, amountText(r)), h('small', null, basisText(r))),
