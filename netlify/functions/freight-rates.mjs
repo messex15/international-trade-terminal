@@ -43,7 +43,7 @@ function validateRate(body) {
 
   let capacity = null;
   if (BASES[body.basis].needsCapacity) {
-    capacity = cleanNumber(body.capacity_t, `Tonnes per ${BASES[body.basis].unit}`, { min: 0.1, max: 100_000, required: true });
+    capacity = cleanNumber(body.capacity_t, `Metric tonnes (MT) per ${BASES[body.basis].unit}`, { min: 0.1, max: 100_000, required: true });
   }
 
   const effectiveFrom = cleanDate(body.effectiveFrom, "Effective date", { required: true });

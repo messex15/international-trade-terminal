@@ -1,7 +1,8 @@
 International Trade Terminal - FREIGHT DESK
 
 WHAT IT IS
-A rate memory and landed cost calculator for trading.
+A rate memory and landed cost calculator for trading. Quantities and
+per-unit prices are in metric tonnes, shown as MT.
 - Rate memory: capture every rail tariff, loading charge, port charge and
   carrier offer as it arrives. Each lane (carrier, route, commodity, billing
   basis) keeps its history and shows the % change between rates.
@@ -17,10 +18,10 @@ A rate memory and landed cost calculator for trading.
   Commission rows ready to fill in. A row left blank is not part of the quote
   (no cost, no warnings, not printed). Adding a rate of the same type from
   rate memory fills the blank row instead of adding another.
-- Commission can be a % of the sale price or an amount per tonne. A % of the
+- Commission can be a % of the sale price or an amount per MT. A % of the
   sale price is covered by the target and floor prices:
       price = (goods + other charges) / (1 - margin - commission %)
-  and its cost per tonne is shown at the offered price, or at the target
+  and its cost per MT is shown at the offered price, or at the target
   price when no offer is entered.
 - Deal details include the customer and the product grade.
 - Final price and estimated earnings: the final price is the price entered on

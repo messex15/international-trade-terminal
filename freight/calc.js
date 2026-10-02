@@ -17,7 +17,7 @@ export const RATE_TYPES = {
 };
 
 export const BASES = {
-  per_tonne: { label: "per tonne", short: "/t", needsCapacity: false },
+  per_tonne: { label: "per MT", short: "/MT", needsCapacity: false },
   per_car: { label: "per railcar", short: "/car", needsCapacity: true, unit: "railcar", plural: "railcars" },
   per_container: { label: "per container", short: "/cntr", needsCapacity: true, unit: "container", plural: "containers" },
   per_truckload: { label: "per truckload", short: "/load", needsCapacity: true, unit: "truckload", plural: "truckloads" },
@@ -147,7 +147,7 @@ export function lineCost(line, { usdcad, quantity_t, goodsPerTonneCAD, salePerTo
 
   if (basis.needsCapacity) {
     const capacity = Number(line.capacity_t);
-    if (!(capacity > 0)) return { error: `Needs tonnes per ${basis.unit}.` };
+    if (!(capacity > 0)) return { error: `Needs metric tonnes (MT) per ${basis.unit}.` };
     if (quantity_t > 0) {
       const units = Math.ceil(quantity_t / capacity - 1e-9);
       return { perTonne: (units * cad) / quantity_t, units, unitLabel: units === 1 ? basis.unit : basis.plural };
@@ -207,8 +207,8 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
     q.saleCurrency === "USD" ||
     (q.lines || []).some((l) => l.currency === "USD" && !BASES[l.basis]?.percent && !isUnusedLine(l));
 
-  if (!(quantity > 0)) issues.push({ level: "error", code: "input", message: "Enter the quantity in tonnes." });
-  if (purchase === null || purchase < 0) issues.push({ level: "error", code: "input", message: "Enter the purchase price per tonne." });
+  if (!(quantity > 0)) issues.push({ level: "error", code: "input", message: "Enter the quantity in metric tonnes (MT)." });
+  if (purchase === null || purchase < 0) issues.push({ level: "error", code: "input", message: "Enter the purchase price per metric tonne." });
   if (usesUSD && !(usdcad > 0)) issues.push({ level: "error", code: "input", message: "Enter a USD to CAD exchange rate." });
   if (targetMargin < 0 || targetMargin >= 100) issues.push({ level: "error", code: "input", message: "Target margin must be between 0 and 99.9%." });
   if (floorMargin < 0 || floorMargin >= 100) issues.push({ level: "error", code: "input", message: "Margin floor must be between 0 and 99.9%." });

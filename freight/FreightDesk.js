@@ -36,7 +36,7 @@ function money(value, currency = 'CAD', digits = 2) {
   moneyFormats[key] ??= new Intl.NumberFormat('en-CA', { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits });
   return moneyFormats[key].format(value);
 }
-const tonnes = (v) => (Number.isFinite(v) ? `${new Intl.NumberFormat('en-CA', { maximumFractionDigits: 3 }).format(v)} t` : '');
+const tonnes = (v) => (Number.isFinite(v) ? `${new Intl.NumberFormat('en-CA', { maximumFractionDigits: 3 }).format(v)} MT` : '');
 const pct = (v) => (Number.isFinite(v) ? `${v.toFixed(1)}%` : '');
 const pctSetting = (v) => (Number.isFinite(v) ? `${Number.isInteger(v) ? v : v.toFixed(1)}%` : '');
 
@@ -556,18 +556,18 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
             input('buyer', { maxLength: 100, list: 'fd-customers', onChange: pickCustomer, autoComplete: 'off' })),
           h(Field, { label: 'Commodity' }, input('commodity', { maxLength: 60, list: 'fd-commodities' })),
           h(Field, { label: 'Grade' }, input('grade', { maxLength: 60, placeholder: 'No. 2 or better' })),
-          h(Field, { label: 'Quantity (tonnes)' }, num('quantity_t')),
+          h(Field, { label: 'Quantity (MT)' }, num('quantity_t')),
           h(Field, { label: 'Delivery terms' }, input('destination', { maxLength: 80, placeholder: 'CFR Manila' })),
           h(Field, { label: 'Quote date' }, input('quoteDate', { type: 'date' })))),
       h('section', { className: 'card' },
         h('div', { className: 'cardTitle' }, h('h3', null, 'Price and margin')),
         h('div', { className: 'formGrid fdGrid3' },
-          h(Field, { label: 'Purchase price per tonne', hint: 'What you pay the grower or supplier.' },
+          h(Field, { label: 'Purchase price per MT', hint: 'What you pay the grower or supplier.' },
             h('span', { className: 'fdCombo' }, num('purchasePrice'), currency('purchaseCurrency', 'Purchase currency'))),
           h(Field, { label: 'USD to CAD rate', hint: quote.usdcadDate ? `Bank of Canada rate for ${formatDate(quote.usdcadDate)}.` : 'CAD for one US dollar.' },
             h('span', { className: 'fdCombo' }, num('usdcad', { placeholder: '1.3850' }),
               h('button', { type: 'button', className: 'secondary', onClick: fetchFx, disabled: fxBusy, title: 'Use the latest Bank of Canada daily rate' }, fxBusy ? '…' : 'BoC rate'))),
-          h(Field, { label: 'Final price per tonne', hint: 'Optional. Leave blank to use the lowest price at your target margin.' },
+          h(Field, { label: 'Final price per MT', hint: 'Optional. Leave blank to use the lowest price at your target margin.' },
             h('span', { className: 'fdCombo' }, num('salePrice', { placeholder: 'Optional' }), currency('saleCurrency', 'Final price currency'))),
           h(Field, { label: 'Target margin (%)' }, num('targetMarginPct', { max: 99.9 })),
           h(Field, { label: 'Margin floor (%)', hint: 'Never quote below this.' }, num('minMarginPct', { max: 99.9 })))),
@@ -576,7 +576,7 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
         result.lines.length
           ? h('div', { className: 'tableWrap' },
             h('table', { className: 'fdStatic' },
-              h('thead', null, h('tr', null, h('th', null, 'Charge'), h('th', null, 'Rate'), h('th', { className: 'fdNum' }, 'Per tonne (CAD)'), h('th', { className: 'fdNum' }, 'Shipment (CAD)'), h('th', null, h('span', { className: 'fdSr' }, 'Remove')))),
+              h('thead', null, h('tr', null, h('th', null, 'Charge'), h('th', null, 'Rate'), h('th', { className: 'fdNum' }, 'Per MT (CAD)'), h('th', { className: 'fdNum' }, 'Shipment (CAD)'), h('th', null, h('span', { className: 'fdSr' }, 'Remove')))),
               h('tbody', null, result.lines.map((line, i) => h(LineRow, { key: i, line, i, rates, setLine, removeLine, useNewer })))))
           : h(Empty, { label: 'No charges yet. Add rail, loading, port and ocean charges from rate memory.' }),
         h('div', { className: 'fdCardFoot' },
@@ -632,7 +632,7 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
         field('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: isPercent ? '%' : 'Amount', 'aria-label': `${typeName} amount` }),
         h('select', { value: isPercent ? 'CAD' : line.currency, onChange: setLine(i, 'currency'), disabled: isPercent, 'aria-label': `${typeName} currency` }, h('option', null, 'CAD'), h('option', null, 'USD')),
         h('select', { value: line.basis, onChange: setLine(i, 'basis'), 'aria-label': `${typeName} billed` }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label))),
-        needsCap && field('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: `Tonnes ${BASES[line.basis].short}`, title: `Tonnes per ${BASES[line.basis].unit}`, 'aria-label': `${typeName} tonnes per unit` })),
+        needsCap && field('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: `MT ${BASES[line.basis].short}`, title: `Metric tonnes (MT) per ${BASES[line.basis].unit}`, 'aria-label': `${typeName} MT per unit` })),
       h('small', { className: 'fdNoPrint' }, note), units, flagList),
     ...computed, remove);
 }
@@ -651,10 +651,10 @@ function FinalBlock({ quote, result: r }) {
   const whole = inUSD && f.totalUSD !== null ? `${money(f.totalUSD, 'USD', 0)} (${money(f.totalCAD, 'CAD', 0)})` : money(f.totalCAD, 'CAD', 0);
   return h('div', { className: 'fdFinal' },
     h('div', { className: 'fdRows' },
-      h(Row, { label: 'Final price per tonne', value: perTonne }),
+      h(Row, { label: 'Final price per MT', value: perTonne }),
       h(Row, { label: 'Final price, whole shipment', value: whole }),
       h(Row, { label: 'Margin', value: pct(f.marginPct) }),
-      h(Row, { label: 'Estimated earnings per tonne', value: money(f.earningsPerTonneCAD) }),
+      h(Row, { label: 'Estimated earnings per MT', value: money(f.earningsPerTonneCAD) }),
       h(Row, { label: 'Estimated earnings', value: money(f.earningsTotalCAD, 'CAD', 0), total: true })),
     f.source === 'target' && h('p', { className: 'fdHolds' },
       `No final price entered, so this uses the lowest price at your ${pctSetting(r.targetMarginPct)} target margin.`));
@@ -666,7 +666,7 @@ function QuoteSummary({ quote, result: r, onSave, saving }) {
   let verdict = null;
   if (ready && r.sale) {
     const s = r.sale;
-    if (s.profitPerTonneCAD < 0) verdict = ['bad', `Loses ${money(-s.profitPerTonneCAD)} per tonne. Do not send this price.`];
+    if (s.profitPerTonneCAD < 0) verdict = ['bad', `Loses ${money(-s.profitPerTonneCAD)} per metric tonne. Do not send this price.`];
     else if (s.belowFloor) verdict = ['bad', `Below your ${pctSetting(r.minMarginPct)} floor. Raise the price to at least ${money(quote.saleCurrency === 'USD' ? r.floorPricePerTonneUSD : r.floorPricePerTonneCAD, quote.saleCurrency)}.`];
     else if (s.belowTarget) verdict = ['warn', `Clears the floor but misses the ${pctSetting(r.targetMarginPct)} target.`];
     else verdict = ['good', `Meets the ${pctSetting(r.targetMarginPct)} target.`];
@@ -678,16 +678,16 @@ function QuoteSummary({ quote, result: r, onSave, saving }) {
       : h(React.Fragment, null,
         h('div', { className: 'fdRows' },
           h(Row, { label: 'Quantity', value: tonnes(r.quantity_t) }),
-          h(Row, { label: 'Goods per tonne', value: money(r.goodsPerTonneCAD) }),
-          h(Row, { label: 'Freight and charges per tonne', value: money(r.chargesPerTonneCAD) }),
-          h(Row, { label: 'Landed cost per tonne', value: money(r.landedPerTonneCAD), total: true }),
+          h(Row, { label: 'Goods per MT', value: money(r.goodsPerTonneCAD) }),
+          h(Row, { label: 'Freight and charges per MT', value: money(r.chargesPerTonneCAD) }),
+          h(Row, { label: 'Landed cost per MT', value: money(r.landedPerTonneCAD), total: true }),
           h(Row, { label: 'Landed cost, whole shipment', value: money(r.landedTotalCAD, 'CAD', 0) })),
         r.saleBasedAt && h('p', { className: 'fdHolds' },
           `Includes ${pctSetting(r.saleBasedPct)} of the sale price (commission), worked out at the ${r.saleBasedAt} price. The target and floor prices cover it.`),
         h('div', { className: 'fdFigure' },
           h('small', null, `Lowest price at ${pctSetting(r.targetMarginPct)} margin`),
-          h('strong', null, money(r.targetPricePerTonneCAD), h('span', null, ' /t')),
-          r.targetPricePerTonneUSD !== null && h('em', null, `${money(r.targetPricePerTonneUSD, 'USD')} per tonne at ${r.usdcad}`)),
+          h('strong', null, money(r.targetPricePerTonneCAD), h('span', null, ' /MT')),
+          r.targetPricePerTonneUSD !== null && h('em', null, `${money(r.targetPricePerTonneUSD, 'USD')} per MT at ${r.usdcad}`)),
         h('div', { className: 'fdRows' },
           h(Row, { label: `Floor at ${pctSetting(r.minMarginPct)} margin`, value: `${money(r.floorPricePerTonneCAD)}${r.floorPricePerTonneUSD !== null ? ` (${money(r.floorPricePerTonneUSD, 'USD')})` : ''}` })),
         r.final && h(FinalBlock, { quote, result: r }),
@@ -838,12 +838,12 @@ function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
           input('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', required: true }),
           h('select', { value: form.currency, onChange: set('currency'), disabled: Boolean(BASES[form.basis]?.percent), 'aria-label': 'Currency' }, h('option', null, 'CAD'), h('option', null, 'USD')))),
         basis?.needsCapacity
-          ? h(Field, { label: `Tonnes per ${basis.unit}`, hint: 'Turns the rate into a cost per tonne.' }, input('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any' }))
+          ? h(Field, { label: `MT per ${basis.unit}`, hint: 'Metric tonnes it holds. Turns the rate into a cost per MT.' }, input('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any' }))
           : h('span', { 'aria-hidden': true }),
         h(Field, { label: 'Effective from' }, input('effectiveFrom', { type: 'date', required: true })),
         h(Field, { label: 'Valid until', hint: 'Offer or tariff expiry, if stated.' }, input('validUntil', { type: 'date' })),
         h(Field, { label: 'Source', className: 'fdSpan2' }, input('source', { maxLength: 200, placeholder: 'Email from CN rates desk, Sep 29' })),
-        h(Field, { label: 'Notes', className: 'fdSpan2' }, h('textarea', { value: form.notes, onChange: set('notes'), maxLength: 500, rows: 3, placeholder: 'Fuel surcharge included, minimum 80 t per car, and similar conditions' }))),
+        h(Field, { label: 'Notes', className: 'fdSpan2' }, h('textarea', { value: form.notes, onChange: set('notes'), maxLength: 500, rows: 3, placeholder: 'Fuel surcharge included, minimum 80 MT per car, and similar conditions' }))),
       h('div', { className: `modalNote${error ? ' fdError' : ''}`, role: error ? 'alert' : undefined },
         error || (editing ? 'For typos only. A new tariff should be captured as a new rate so the change is tracked.' : 'Saved to shared rate memory. Everyone with Freight Desk access sees it.')),
       h('div', { className: 'modalActions' },
@@ -912,7 +912,7 @@ function QuotesView({ quotes, onOpen }) {
     visible.length
       ? h('div', { className: 'tableWrap' },
         h('table', null,
-          h('thead', null, h('tr', null, ['Quote date', 'Reference', 'Customer', 'Commodity', 'Tonnes', 'Landed /t', 'Final /t', 'Margin', 'Est. earnings', 'Holds until'].map((c) => h('th', { key: c, className: ['Tonnes', 'Landed /t', 'Final /t', 'Est. earnings'].includes(c) ? 'fdNum' : undefined }, c)))),
+          h('thead', null, h('tr', null, ['Quote date', 'Reference', 'Customer', 'Commodity', 'Quantity', 'Landed /MT', 'Final /MT', 'Margin', 'Est. earnings', 'Holds until'].map((c) => h('th', { key: c, className: ['Quantity', 'Landed /MT', 'Final /MT', 'Est. earnings'].includes(c) ? 'fdNum' : undefined }, c)))),
           h('tbody', null, visible.map((q) => { const f = finalOf(q); return h('tr', { key: q.id, tabIndex: 0, onClick: () => onOpen(q), onKeyDown: (e) => { if (e.key === 'Enter') onOpen(q); } },
             h('td', null, formatDate(q.quoteDate), h('small', null, `by ${q.createdBy}`)),
             h('td', null, h('b', null, q.reference || 'No reference')),
@@ -936,8 +936,8 @@ function QuoteDrawer({ summary: q, onClose, onLoad, onDelete }) {
         q.commodity && h('div', { className: 'businessTag' }, [q.commodity, q.grade].filter(Boolean).join(', ')),
         h('div', { className: 'detailGrid' },
           [['Customer', q.buyer || 'Not set'], ['Quote date', formatDate(q.quoteDate)], ['Quantity', tonnes(q.quantity_t)],
-            ['Landed cost per tonne', money(q.landedPerTonneCAD)], ['Lowest price at target', money(q.targetPricePerTonneCAD)],
-            ['Final price per tonne', f ? `${money(f.perTonne)}${f.entered ? '' : ' (at target)'}` : 'Not set'],
+            ['Landed cost per MT', money(q.landedPerTonneCAD)], ['Lowest price at target', money(q.targetPricePerTonneCAD)],
+            ['Final price per MT', f ? `${money(f.perTonne)}${f.entered ? '' : ' (at target)'}` : 'Not set'],
             ['Margin', f ? `${pct(f.marginPct)}${f.entered && q.belowFloor ? ', below floor' : ''}` : 'Not set'],
             ['Estimated earnings', f ? money(f.earnings, 'CAD', 0) : 'Not set'],
             ['Holds until', q.validUntil ? formatDate(q.validUntil) : 'No end date'], ['Saved by', q.createdBy]]

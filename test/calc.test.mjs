@@ -29,7 +29,7 @@ test("percent of value applies to goods cost", () => {
 
 test("missing capacity is an input error", () => {
   const r = lineCost({ basis: "per_car", amount: 4500, currency: "CAD", capacity_t: "" }, { usdcad: 1.4, quantity_t: 100, goodsPerTonneCAD: 500 });
-  assert.match(r.error, /tonnes per railcar/);
+  assert.match(r.error, /metric tonnes \(MT\) per railcar/);
 });
 
 test("full quote: landed cost, target price and margin check", () => {
@@ -137,7 +137,7 @@ test("with an offered price, commission is charged on that price", () => {
   assert.equal(q.saleBasedAt, "offered");
 });
 
-test("commission can also be an amount per tonne", () => {
+test("commission can also be an amount per MT", () => {
   const q = computeQuote(deal([loading, { ...commissionPct(3), basis: "per_tonne" }]));
   near(q.landedPerTonneCAD, 523);
   near(q.targetPricePerTonneCAD, 523 / 0.92);
