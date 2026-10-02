@@ -22,7 +22,9 @@ per-unit prices are in metric tonnes, shown as MT.
   adding another.
 - Commission can be a % of the final price or an amount per MT. A % needs
   the final price per MT, and its cost per MT is worked out from it.
-- Deal details include the customer and the product grade.
+- Deal details include the customer and the product grade. The quote
+  reference and delivery terms are optional; left blank, they are left off
+  the PDF.
 - "Other charge": give it a name (Fumigation, Bagging, Demurrage...) and the
   name is shown in place of "Other charge" on the quote, the PDF and in rate
   memory. In rate memory the name is required, and each name keeps its own

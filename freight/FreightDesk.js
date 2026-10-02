@@ -228,6 +228,14 @@ function Empty({ label }) {
 function Field({ label, hint, className, children }) {
   return h('label', { className }, label, children, hint && h('span', { className: 'fdHint' }, hint));
 }
+/** Label for an optional field; "(optional)" is not printed. */
+function optionalLabel(text) {
+  return h(React.Fragment, null, text, h('span', { className: 'fdNoPrint' }, ' (optional)'));
+}
+/** An optional field left blank is left off the PDF. */
+function printIfFilled(value) {
+  return String(value ?? '').trim() ? undefined : 'fdNoPrint';
+}
 function Button({ kind = 'secondary', icon, children, ...rest }) {
   return h('button', { type: 'button', className: kind, ...rest }, icon && h(icon, { size: 15 }), children);
 }
@@ -615,14 +623,14 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
         h('div', { className: 'formGrid fdGrid3' },
           h(Field, { label: 'Your company name', hint: 'Printed at the top of the PDF.', className: 'fdNoPrint' },
             input('companyName', { maxLength: 100, placeholder: DEFAULT_COMPANY })),
-          h(Field, { label: 'Quote reference' }, input('reference', { maxLength: 60, placeholder: 'Q-2026-041' })),
+          h(Field, { label: optionalLabel('Quote reference'), className: printIfFilled(quote.reference) },
+            input('reference', { maxLength: 60, placeholder: 'Q-2026-041' })),
           h(Field, { label: 'Customer', hint: h('span', { className: 'fdNoPrint' }, customerHint) },
             input('buyer', { maxLength: 100, list: 'fd-customers', onChange: pickCustomer, autoComplete: 'off' })),
           h(Field, { label: 'Commodity' }, input('commodity', { maxLength: 60, list: 'fd-commodities' })),
           h(Field, { label: 'Grade' }, input('grade', { maxLength: 60, placeholder: 'No. 2 or better' })),
           h(Field, { label: 'Quantity (MT)' }, num('quantity_t')),
-          // Optional: left off the PDF when blank.
-          h(Field, { label: h(React.Fragment, null, 'Delivery terms', h('span', { className: 'fdNoPrint' }, ' (optional)')), className: String(quote.destination || '').trim() ? undefined : 'fdNoPrint' },
+          h(Field, { label: optionalLabel('Delivery terms'), className: printIfFilled(quote.destination) },
             input('destination', { maxLength: 80, placeholder: 'CFR Manila' })),
           h(Field, { label: 'Quote date' }, input('quoteDate', { type: 'date' })))),
       h('section', { className: 'card' },

@@ -200,7 +200,7 @@ await step("rates can be deleted for good", async () => {
 await step("saved quotes are recomputed on the server and kept per workspace", async () => {
   const body = {
     companyName: "Prairie Pulse Traders", reference: `Q-E2E-${RUN}`, buyer: "PT Example", commodity: lane.commodity, quantity_t: 180, quoteDate: "2026-09-30",
-    purchasePrice: 400, purchaseCurrency: "CAD", usdcad: 1.4, targetMarginPct: 10, minMarginPct: 5, salePrice: 380, saleCurrency: "USD",
+    purchasePrice: 400, purchaseCurrency: "CAD", usdcad: 1.4, salePrice: 380, saleCurrency: "USD",
     lines: [{ rateId: firstRateId, ...lane, amount: 4500, effectiveFrom: "2026-08-01", validUntil: "2026-10-31" }],
   };
   const res = await req("/api/freight/quotes?view=client", { method: "POST", cookie: client.cookie, body });
@@ -241,6 +241,16 @@ await step("grade, customer, standard rows and a commission on the final price a
   assert.equal(noPrice.status, 400, "a % commission needs the final price");
   const { quotes } = await (await req("/api/freight/quotes", { cookie: MEMBER })).json();
   assert.equal(quotes.find((q) => q.id === quote.id).grade, "No. 2 or better");
+  assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+});
+
+await step("a quote saves without a reference", async () => {
+  const res = await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body: { buyer: "PT Example", quantity_t: 100, quoteDate: "2026-10-02", purchasePrice: 500, purchaseCurrency: "CAD", lines: [] } });
+  assert.equal(res.status, 201, await res.clone().text());
+  const { quote } = await res.json();
+  assert.equal(quote.inputs.reference, "");
+  const { quotes } = await (await req("/api/freight/quotes", { cookie: MEMBER })).json();
+  assert.equal(quotes.find((q) => q.id === quote.id).reference, "");
   assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
 });
 
