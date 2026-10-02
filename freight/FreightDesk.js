@@ -11,7 +11,7 @@ import {
   Link2, PackageSearch, PencilLine, Plus, Printer, RefreshCw, Search, Ship, Trash2, TriangleAlert, Users, X,
 } from 'lucide-react';
 import {
-  BASES, RATE_TYPES, chargeCurrency, chargeLabel, compareRatesNewestFirst, computeQuote, daysBetween, formatDate,
+  BASES, RATE_TYPES, chargeCurrency, chargeLabel, compareRatesNewestFirst, computeQuote, daysBetween, formatDate, fromCAD,
   groupLanes, isUnusedLine, isoToday, laneKey, percentChange,
 } from './calc.js';
 
@@ -130,7 +130,7 @@ function blankQuote() {
   return {
     companyName: DEFAULT_COMPANY, reference: '', buyer: '', commodity: '', grade: '', destination: '', quantity_t: '', quoteDate: isoToday(),
     purchasePrice: '', purchaseCurrency: 'CAD', usdcad: '', usdcadDate: '',
-    salePrice: '', saleCurrency: 'USD', lines: withStandardLines(),
+    salePrice: '', saleCurrency: 'USD', summaryCurrency: 'CAD', lines: withStandardLines(),
   };
 }
 /** Quotes no longer have margin targets; older drafts and saved quotes drop them. */
@@ -372,7 +372,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
 
   function newQuote() {
     if (quote.lines.some((l) => !isUnusedLine(l)) && !confirm('Start a new quote? The current one is cleared unless you saved it.')) return;
-    setQuote((q) => ({ ...blankQuote(), companyName: q.companyName, usdcad: q.usdcad, usdcadDate: q.usdcadDate }));
+    setQuote((q) => ({ ...blankQuote(), companyName: q.companyName, usdcad: q.usdcad, usdcadDate: q.usdcadDate, summaryCurrency: q.summaryCurrency || 'CAD' }));
   }
 
   function printQuote() {
@@ -609,6 +609,7 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
   const chargeCurrencies = new Set(result.lines.filter((l) => !l.unused).map(chargeCurrency));
   const columnCurrency = chargeCurrencies.size > 1 ? null : chargeCurrencies.has('USD') ? 'USD' : 'CAD';
   const columnHead = (label) => (columnCurrency ? `${label} (${columnCurrency})` : label);
+  const summaryCurrency = quote.summaryCurrency === 'USD' ? 'USD' : 'CAD';
 
   // Picking a customer from the list also fills their usual delivery terms when
   // the quote has none, or still has the terms of the customer picked before
@@ -665,15 +666,17 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
           ? h('div', { className: 'tableWrap' },
             h('table', { className: 'fdStatic' },
               h('thead', null, h('tr', null, h('th', null, 'Charge'), h('th', null, 'Rate'), h('th', { className: 'fdNum' }, columnHead('Per MT')), h('th', { className: 'fdNum' }, columnHead('Shipment')), h('th', null, h('span', { className: 'fdSr' }, 'Remove')))),
-              h('tbody', null, result.lines.map((line, i) => h(LineRow, { key: i, line, i, columnCurrency, rates, setLine, removeLine, useNewer })))))
+              h('tbody', null, result.lines.map((line, i) => h(LineRow, { key: i, line, i, columnCurrency, summaryCurrency, usdcad: result.usdcad, rates, setLine, removeLine, useNewer })))))
           : h(Empty, { label: 'No charges yet. Add rail, loading, port and ocean charges from rate memory.' }),
         h('div', { className: 'fdCardFoot' },
           h(Button, { kind: 'primary', icon: Plus, onClick: onPick }, 'Add from rate memory'),
           h(Button, { icon: PencilLine, onClick: () => setQuote((q) => ({ ...q, lines: [...q.lines, oneOffLine()] })) }, 'Add a one-off charge')))),
-    h('aside', { className: 'fdCalcSide' }, h(QuoteSummary, { quote, result, onSave, saving })));
+    h('aside', { className: 'fdCalcSide' }, h(QuoteSummary, {
+      quote, result, onSave, saving, onCurrency: (summaryCurrency) => setQuote((q) => ({ ...q, summaryCurrency })),
+    })));
 }
 
-function LineRow({ line, i, columnCurrency, rates, setLine, removeLine, useNewer }) {
+function LineRow({ line, i, columnCurrency, summaryCurrency, usdcad, rates, setLine, removeLine, useNewer }) {
   const flags = line.flags.filter((f) => f.code !== 'manual');
   const flagList = flags.length > 0 && h('ul', { className: 'fdFlags' }, flags.map((f, k) => h('li', { key: k, className: f.level },
     f.message, f.newerId && h('button', {
@@ -682,17 +685,21 @@ function LineRow({ line, i, columnCurrency, rates, setLine, removeLine, useNewer
     }, 'Use newer rate'))));
   const units = line.units ? h('small', null, `${line.units} ${line.unitLabel} for this quantity`) : null;
   const remove = h('td', { className: 'fdNum' }, h('button', { type: 'button', className: 'iconButton', onClick: () => removeLine(i), 'aria-label': 'Remove this charge' }, h(Trash2, { size: 15 })));
-  // A USD charge is shown in USD, with the CAD it adds to the landed cost below.
+  // A USD charge is shown in USD. Below an amount in the other currency is what
+  // it adds to the quote summary, in the summary's currency, so the rows add up.
   const inUSD = line.perTonneUSD !== null && line.perTonneUSD !== undefined;
   const marked = !columnCurrency;
+  const sub = summaryCurrency !== (inUSD ? 'USD' : 'CAD') ? summaryCurrency : null;
+  const inSub = (cad) => (sub === 'CAD' ? cad : fromCAD(cad, 'USD', usdcad));
+  const subLine = (cad, digits) => sub && inSub(cad) !== null && h('small', null, chargeMoney(inSub(cad), sub, digits, true));
   const computed = [
     h('td', { key: 'pt', className: 'fdNum' },
       h('b', null, inUSD ? chargeMoney(line.perTonneUSD, 'USD', 2, marked) : chargeMoney(line.perTonneCAD, 'CAD', 2, marked)),
-      inUSD && h('small', null, chargeMoney(line.perTonneCAD, 'CAD', 2, true)),
+      subLine(line.perTonneCAD, 2),
       line.atPrice && h('small', null, 'at the final price')),
     h('td', { key: 'tot', className: 'fdNum' },
       inUSD ? chargeMoney(line.totalUSD, 'USD', 0, marked) : chargeMoney(line.totalCAD, 'CAD', 0, marked),
-      inUSD && line.totalCAD !== null && h('small', null, chargeMoney(line.totalCAD, 'CAD', 0, true))),
+      subLine(line.totalCAD, 0)),
   ];
 
   if (line.rateId) {
@@ -740,47 +747,62 @@ function Row({ label, value, total }) {
 }
 
 /** The price going to the customer and what the deal is expected to earn. */
-function FinalBlock({ quote, result: r }) {
+function FinalBlock({ quote, result: r, cur, inCur }) {
   const f = r.final;
-  const inUSD = quote.saleCurrency === 'USD';
-  let perTonne = money(f.perTonneCAD);
-  if (f.source === 'entered') perTonne = `${money(Number(quote.salePrice), quote.saleCurrency)}${inUSD ? ` (${money(f.perTonneCAD)})` : ''}`;
-  else if (inUSD && f.perTonneUSD !== null) perTonne = `${money(f.perTonneUSD, 'USD')} (${money(f.perTonneCAD)})`;
-  const whole = inUSD && f.totalUSD !== null ? `${money(f.totalUSD, 'USD', 0)} (${money(f.totalCAD, 'CAD', 0)})` : money(f.totalCAD, 'CAD', 0);
+  // The final price as entered, alongside it in the summary currency when the two differ.
+  const priceCur = quote.saleCurrency === 'USD' ? 'USD' : 'CAD';
+  const entered = Number(quote.salePrice);
+  const perTonne = priceCur === cur
+    ? money(entered, cur)
+    : `${money(inCur(f.perTonneCAD), cur)} (${money(entered, priceCur)})`;
+  const enteredTotal = priceCur === 'USD' ? f.totalUSD : f.totalCAD;
+  const whole = priceCur === cur
+    ? money(inCur(f.totalCAD), cur, 0)
+    : `${money(inCur(f.totalCAD), cur, 0)}${enteredTotal !== null ? ` (${money(enteredTotal, priceCur, 0)})` : ''}`;
   const customer = String(quote.buyer || '').trim();
   return h('div', { className: 'fdFinal' },
     h('div', { className: 'fdFinalTitle' }, customer ? `Final price for ${customer}` : 'Final price'),
     h('div', { className: 'fdRows' },
       h(Row, { label: 'Per MT', value: perTonne }),
       h(Row, { label: 'Whole shipment', value: whole }),
-      h(Row, { label: 'Estimated earnings per MT', value: money(f.earningsPerTonneCAD) }),
-      h(Row, { label: 'Estimated earnings', value: money(f.earningsTotalCAD, 'CAD', 0), total: true })));
+      h(Row, { label: 'Estimated earnings per MT', value: money(inCur(f.earningsPerTonneCAD), cur) }),
+      h(Row, { label: 'Estimated earnings', value: money(inCur(f.earningsTotalCAD), cur, 0), total: true })));
 }
 
-function QuoteSummary({ quote, result: r, onSave, saving }) {
+function QuoteSummary({ quote, result: r, onSave, saving, onCurrency }) {
   const ready = r.landedPerTonneCAD !== null && r.quantity_t > 0;
   const issues = r.issues.filter((i) => i.code !== 'margin');
   const customer = String(quote.buyer || '').trim();
   const losing = ready && r.final && r.final.earningsPerTonneCAD < 0;
+  // Worked out in CAD; shown in CAD or USD (at the quote's USD to CAD rate).
+  const cur = quote.summaryCurrency === 'USD' ? 'USD' : 'CAD';
+  const inCur = (cad) => fromCAD(cad, cur, r.usdcad);
   return h('section', { className: 'card fdSummary' },
-    h('div', { className: 'cardTitle' }, h('h3', null, 'Quote summary'), quote.reference && h('span', { className: 'badge' }, quote.reference)),
+    h('div', { className: 'cardTitle' },
+      h('h3', null, 'Quote summary', h('span', { className: 'fdPrintOnly fdInline' }, ` (${cur})`)),
+      h('div', { className: 'fdSummaryTools' },
+        h('div', { className: 'fdSeg fdNoPrint', role: 'group', 'aria-label': 'Summary currency' },
+          ['CAD', 'USD'].map((c) => h('button', { key: c, type: 'button', 'aria-pressed': cur === c, onClick: () => onCurrency(c) }, c))),
+        quote.reference && h('span', { className: 'badge' }, quote.reference))),
     !ready
       ? h('p', { className: 'fdSummaryEmpty' }, 'Enter a quantity and purchase price, then add charges. The landed cost appears here.')
       : h(React.Fragment, null,
         h('div', { className: 'fdRows' },
           h(Row, { label: 'Quantity', value: tonnes(r.quantity_t) }),
-          h(Row, { label: 'Goods per MT', value: money(r.goodsPerTonneCAD) }),
-          h(Row, { label: 'Freight and charges per MT', value: money(r.chargesPerTonneCAD) }),
-          h(Row, { label: 'Landed cost per MT', value: money(r.landedPerTonneCAD), total: true }),
-          h(Row, { label: 'Landed cost, whole shipment', value: money(r.landedTotalCAD, 'CAD', 0) })),
+          h(Row, { label: 'Goods per MT', value: money(inCur(r.goodsPerTonneCAD), cur) }),
+          h(Row, { label: 'Freight and charges per MT', value: money(inCur(r.chargesPerTonneCAD), cur) }),
+          h(Row, { label: 'Landed cost per MT', value: money(inCur(r.landedPerTonneCAD), cur), total: true }),
+          h(Row, { label: 'Landed cost, whole shipment', value: money(inCur(r.landedTotalCAD), cur, 0) })),
         r.saleBasedAt && h('p', { className: 'fdHolds' },
           `Includes ${pctSetting(r.saleBasedPct)} of the final price as commission.`),
         r.final
-          ? h(FinalBlock, { quote, result: r })
+          ? h(FinalBlock, { quote, result: r, cur, inCur })
           : h('div', { className: 'fdFinal fdNoPrint' },
             h('div', { className: 'fdFinalTitle' }, customer ? `Final price for ${customer}` : 'Final price'),
             h('p', { className: 'fdHolds' }, 'Enter a final price per MT to see the final price and estimated earnings.')),
-        losing && h('div', { className: 'fdVerdict bad' }, `Loses ${money(-r.final.earningsPerTonneCAD)} per metric tonne. Do not send this price.`),
+        losing && h('div', { className: 'fdVerdict bad' }, inCur(-r.final.earningsPerTonneCAD) !== null
+          ? `Loses ${money(inCur(-r.final.earningsPerTonneCAD), cur)} per metric tonne. Do not send this price.`
+          : 'This price loses money. Do not send it.'),
         h('p', { className: 'fdHolds' }, r.validUntil
           ? h(React.Fragment, null, 'Holds until ', h('b', null, formatDate(r.validUntil)), ', when the first rate used expires.')
           : quote.lines.some((l) => l.rateId) ? 'None of the rates used state an end date. Confirm them before sending.' : null)),

@@ -12,10 +12,16 @@ per-unit prices are in metric tonnes, shown as MT.
   truckload charges count whole units. USD converts at a typed rate or the
   Bank of Canada daily rate. Enter the final price for the customer to see
   the estimated earnings, or a warning when that price loses money.
-- Charges table: a USD charge shows its Per MT and Shipment amounts in USD,
-  with the CAD it adds to the landed cost beneath. The column headings say
-  (CAD) or (USD) when every charge is in that currency; when they are mixed,
-  each amount is marked C$ or US$. Totals in the quote summary are in CAD.
+- Charges table: a USD charge shows its Per MT and Shipment amounts in USD.
+  The column headings say (CAD) or (USD) when every charge is in that
+  currency; when they are mixed, each amount is marked C$ or US$. Where a
+  charge's currency differs from the quote summary's, the amount in the
+  summary's currency is shown beneath, so the rows add up to the summary.
+- Quote summary: shown in CAD or USD (the CAD / USD switch on the summary,
+  kept with the quote and printed as "Quote summary (USD)"). Everything is
+  worked out in CAD and converted at the quote's USD to CAD rate, so a USD
+  summary needs that rate. New quotes keep the last choice. Saved quotes are
+  listed in CAD.
 - Rate checks: each line warns when its rate has expired, is older
   than 30 days, is not in effect yet, or a newer rate is on file. A quote
   "holds until" the first expiry among the rates it uses.

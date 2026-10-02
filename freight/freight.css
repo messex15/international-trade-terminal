@@ -90,6 +90,13 @@
 .fdIssues li.error:before{background:#c0564b}
 .fdSummaryActions{padding:14px 17px 0}
 .fdSummaryActions .primary{width:100%;justify-content:center;padding:11px}
+.fdSummaryTools{display:flex;align-items:center;gap:8px}
+.fdSeg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:#fff}
+.fd .fdSeg button{display:block;border:0;background:#fff;color:#557490;font-size:9px;font-weight:700;line-height:1.2;padding:4px 8px;cursor:pointer}
+.fd .fdSeg button+button{border-left:1px solid var(--line)}
+.fd .fdSeg button:hover{background:#eef3f8}
+.fd .fdSeg button[aria-pressed="true"]{background:#244d74;color:#fff}
+.fd .fdSeg button:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
 .fdFine{margin:10px 17px 16px;font-size:9px;color:#8797a7;line-height:1.5}
 
 /* ---------- Drawers, modals, access ---------- */
@@ -162,6 +169,7 @@ body.fdPrinting .fdCalc{grid-template-rows:auto 1fr auto}
 body.fdPrinting .fd select{-webkit-appearance:none;appearance:none}
 body.fdPrinting .fd .fdCombo button{display:none}
 body.fdPrinting .fdPrintOnly{display:block}
+body.fdPrinting .fdPrintOnly.fdInline{display:inline}
 body.fdPrinting .fdCalcSide{grid-column:2;grid-row:1/span 2}
 body.fdPrinting .fdChargesCard{grid-column:1/-1}
 body.fdPrinting .fd .dataCard,body.fdPrinting .fd .tableWrap{overflow:visible}

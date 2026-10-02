@@ -254,6 +254,20 @@ await step("a quote saves without a reference", async () => {
   assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
 });
 
+await step("the summary currency is kept with the quote", async () => {
+  const body = { quantity_t: 100, quoteDate: "2026-10-02", purchasePrice: 500, purchaseCurrency: "CAD", usdcad: 1.4, lines: [] };
+  const usd = await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body: { ...body, summaryCurrency: "USD" } });
+  assert.equal(usd.status, 201, await usd.clone().text());
+  const saved = (await usd.json()).quote;
+  assert.equal(saved.inputs.summaryCurrency, "USD");
+  const odd = await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body: { ...body, summaryCurrency: "EUR" } });
+  const other = (await odd.json()).quote;
+  assert.equal(other.inputs.summaryCurrency, "CAD", "anything else is CAD");
+  const noRate = await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body: { ...body, usdcad: "", summaryCurrency: "USD" } });
+  assert.equal(noRate.status, 400, "a USD summary needs the exchange rate");
+  for (const q of [saved, other]) assert.equal((await req(`/api/freight/quotes/${q.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+});
+
 await step("customer lists: staff have one, each client company has its own", async () => {
   const name = `Zeta Foods ${RUN}`;
   const add = await req("/api/freight/customers", { method: "POST", cookie: MEMBER, body: { name, country: "Indonesia", deliveryTerms: "CFR Jakarta", email: "buyer@zeta.example" } });

@@ -129,6 +129,13 @@ export function toCAD(amount, currency, usdcad) {
   return amount;
 }
 
+/** A CAD amount in `currency` (CAD or USD), at the quote's USD to CAD rate. */
+export function fromCAD(cad, currency, usdcad) {
+  if (cad === null || cad === undefined || !Number.isFinite(cad)) return null;
+  if (currency === "USD") return usdcad > 0 ? cad / usdcad : null;
+  return cad;
+}
+
 /**
  * The currency a charge is billed in. A % charge is worked out from CAD
  * amounts (goods value, final price), so it is in CAD whatever is picked.
@@ -225,6 +232,7 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
     q.purchaseCurrency === "USD" ||
     // The final price's currency only matters once a price is entered.
     (q.saleCurrency === "USD" && num(q.salePrice) > 0) ||
+    q.summaryCurrency === "USD" ||
     (q.lines || []).some((l) => chargeCurrency(l) === "USD" && !isUnusedLine(l));
 
   if (!(quantity > 0)) issues.push({ level: "error", code: "input", message: "Enter the quantity in metric tonnes (MT)." });

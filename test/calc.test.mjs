@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chargeCurrency, chargeLabel, computeQuote, groupLanes, laneKey, lineCost, lineName, percentChange } from "../freight/calc.js";
+import { chargeCurrency, chargeLabel, computeQuote, fromCAD, groupLanes, laneKey, lineCost, lineName, percentChange } from "../freight/calc.js";
 
 const near = (actual, expected, eps = 1e-6) => assert.ok(Math.abs(actual - expected) < eps, `${actual} != ${expected}`);
 
@@ -265,4 +265,19 @@ test("a blank final price in USD does not need an exchange rate", () => {
   assert.equal(q.hasInputErrors, false, JSON.stringify(q.issues));
   const priced = computeQuote(deal([loading], { saleCurrency: "USD", salePrice: 400 }));
   assert.ok(priced.issues.some((i) => i.message === "Enter a USD to CAD exchange rate."));
+});
+
+// ---------------------------------------------------------------- summary currency
+
+test("summary amounts convert from CAD at the quote's rate", () => {
+  near(fromCAD(532, "USD", 1.4), 380);
+  assert.equal(fromCAD(532, "CAD", 1.4), 532);
+  assert.equal(fromCAD(532, "USD", ""), null, "no rate, no USD amount");
+  assert.equal(fromCAD(null, "USD", 1.4), null);
+});
+
+test("a summary in USD needs an exchange rate", () => {
+  const q = computeQuote(deal([loading], { summaryCurrency: "USD" }));
+  assert.ok(q.issues.some((i) => i.message === "Enter a USD to CAD exchange rate."));
+  assert.equal(computeQuote(deal([loading], { summaryCurrency: "USD", usdcad: 1.4 })).hasInputErrors, false);
 });

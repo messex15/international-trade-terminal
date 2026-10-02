@@ -75,6 +75,7 @@ function cleanInputs(body) {
     usdcadDate: cleanDate(body.usdcadDate, "Exchange rate date"),
     salePrice: cleanNumber(body.salePrice, "Final price", { min: 0, max: 1_000_000 }),
     saleCurrency: cleanCurrency(body.saleCurrency),
+    summaryCurrency: cleanCurrency(body.summaryCurrency),
     notes: cleanText(body.notes, 1000),
     lines: lines.map(cleanLine),
   };
