@@ -23,7 +23,7 @@ function Shell() {
         h('div', { className: 'brandWords' }, h('b', null, 'INTERNATIONAL'), h('small', null, 'TRADE TERMINAL'))),
       h('span', { className: 'fdBarTitle' }, 'Freight Desk'),
       session && h('div', { className: 'fdWho' },
-        h('span', null, `Signed in as ${session.label}`),
+        h('span', null, `Signed in as ${session.label}${session.company ? `, ${session.company}` : ''}`),
         session.kind === 'member'
           ? h('a', { href: '/app/#Freight%20Desk' }, h(LayoutDashboard, { size: 15 }), 'Trade terminal')
           : h('button', { type: 'button', onClick: signOut }, h(LogOut, { size: 15 }), 'Sign out'))),

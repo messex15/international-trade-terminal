@@ -1,5 +1,9 @@
-// Customer list, shared by everyone who uses the Freight Desk, so a quote can
-// pick its customer (and their usual delivery terms) instead of retyping them.
+// Customer lists, so a quote can pick its customer (and their usual delivery
+// terms) instead of retyping them. Portal staff have one list. Each client
+// company has its own, seen only through that company's access links; a link
+// made before links named a company has a list of its own.
+//   ?view=client  sent by the client page (/freight/): a client link wins over a
+//                 portal sign-in in the same browser, like /api/freight/session.
 // GET    /api/freight/customers        the list, A to Z
 // POST   /api/freight/customers        add { name, contact, email, phone, country, deliveryTerms, notes }
 // PUT    /api/freight/customers/:id    update
@@ -16,6 +20,7 @@ import {
   route,
   updateJsonDoc,
 } from "../lib/http.mjs";
+import { sha256Hex } from "../lib/session.mjs";
 
 const KEY = "customers.json";
 const EMPTY = { version: 1, customers: [] };
@@ -40,6 +45,13 @@ function cleanCustomer(body) {
   };
 }
 
+/** The blob that holds this visitor's list. */
+async function listKey(session) {
+  if (session.kind === "member") return KEY;
+  if (session.company) return `company/${await sha256Hex(normName(session.company))}.json`;
+  return `link/${session.sid}.json`;
+}
+
 function assertUniqueName(customers, name, exceptId = null) {
   if (customers.some((c) => c.id !== exceptId && normName(c.name) === normName(name))) {
     throw new HttpError(409, `${name} is already on the customer list.`);
@@ -47,13 +59,15 @@ function assertUniqueName(customers, name, exceptId = null) {
 }
 
 export default route(async (req, context) => {
-  const session = await requireSession(req);
+  const clientView = new URL(req.url).searchParams.get("view") === "client";
+  const session = await requireSession(req, { preferMember: !clientView });
   const store = customerStore();
+  const key = await listKey(session);
   const id = context.params?.id;
   if (id && !/^[a-z0-9]{9}-[a-z0-9]{6}$/.test(id)) throw new HttpError(404, "No customer with that id.");
 
   if (req.method === "GET" && !id) {
-    const doc = (await store.get(KEY, { type: "json" })) || EMPTY;
+    const doc = (await store.get(key, { type: "json" })) || EMPTY;
     return json({ customers: [...doc.customers].sort(byName) });
   }
 
@@ -62,7 +76,7 @@ export default route(async (req, context) => {
 
   if (req.method === "POST" && !id) {
     const fields = cleanCustomer(await readJson(req, 10_000));
-    const customer = await updateJsonDoc(store, KEY, EMPTY, (doc) => {
+    const customer = await updateJsonDoc(store, key, EMPTY, (doc) => {
       if (doc.customers.length >= MAX_CUSTOMERS) throw new HttpError(400, `The customer list is full (${MAX_CUSTOMERS} customers).`);
       assertUniqueName(doc.customers, fields.name);
       const added = { id: newId(), ...fields, createdAt: now, createdBy: session.label, updatedAt: now, updatedBy: session.label };
@@ -73,7 +87,7 @@ export default route(async (req, context) => {
 
   if (req.method === "PUT" && id) {
     const fields = cleanCustomer(await readJson(req, 10_000));
-    const customer = await updateJsonDoc(store, KEY, EMPTY, (doc) => {
+    const customer = await updateJsonDoc(store, key, EMPTY, (doc) => {
       const current = doc.customers.find((c) => c.id === id);
       if (!current) throw new HttpError(404, "No customer with that id. It may have been removed.");
       assertUniqueName(doc.customers, fields.name, id);
@@ -84,7 +98,7 @@ export default route(async (req, context) => {
   }
 
   if (req.method === "DELETE" && id) {
-    await updateJsonDoc(store, KEY, EMPTY, (doc) => {
+    await updateJsonDoc(store, key, EMPTY, (doc) => {
       if (!doc.customers.some((c) => c.id === id)) throw new HttpError(404, "No customer with that id. It may have been removed.");
       return { doc: { ...doc, customers: doc.customers.filter((c) => c.id !== id) }, value: null };
     });

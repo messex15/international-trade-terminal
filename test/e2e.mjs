@@ -37,8 +37,8 @@ const req = (path, { method = "GET", body, headers = {}, cookie } = {}) =>
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-async function clientSession(label) {
-  const res = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label, expiresHours: 24 } });
+async function clientSession(label, company = "E2E Client Co") {
+  const res = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label, company, expiresHours: 24 } });
   assert.equal(res.status, 201, await res.clone().text());
   const { url, link } = await res.json();
   const token = url.split("#")[1];
@@ -101,6 +101,14 @@ await step("a client link redeems once and opens the desk", async () => {
   assert.equal(again.status, 410);
 });
 
+await step("a link names the client's company, and the session reports it", async () => {
+  assert.equal((await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label: "No company" } })).status, 400);
+  const s = await (await req("/api/freight/session?view=client", { cookie: client.cookie })).json();
+  assert.equal(s.company, "E2E Client Co");
+  const { links } = await (await req("/api/freight/access-links", { cookie: MEMBER })).json();
+  assert.equal(links.find((l) => l.id === client.linkId).company, "E2E Client Co");
+});
+
 await step("clients cannot manage links", async () => {
   assert.equal((await req("/api/freight/access-links", { cookie: client.cookie })).status, 403);
   const make = await req("/api/freight/access-links", { method: "POST", cookie: client.cookie, body: { label: "sneaky" } });
@@ -122,14 +130,14 @@ await step("the client page never offers link management, even in a member's bro
 });
 
 await raceStep("five simultaneous redeems of one link: exactly one wins", async () => {
-  const res = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label: "Race test" } });
+  const res = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label: "Race test", company: "Race Co" } });
   const token = (await res.json()).url.split("#")[1];
   const results = await Promise.all(Array.from({ length: 5 }, () => req("/api/freight/redeem", { method: "POST", body: { token } })));
   assert.deepEqual(results.map((r) => r.status).sort(), [200, 410, 410, 410, 410]);
 });
 
 await step("cross-site writes are blocked", async () => {
-  const res = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label: "x" }, headers: { origin: "https://evil.example" } });
+  const res = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label: "x", company: "x" }, headers: { origin: "https://evil.example" } });
   assert.equal(res.status, 403);
 });
 
@@ -205,21 +213,37 @@ await step("grade, customer, standard rows and a commission on the sale price ar
   assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
 });
 
-await step("the customer list: add, refuse duplicates, update, list A to Z, remove", async () => {
+await step("customer lists: staff have one, each client company has its own", async () => {
   const name = `Zeta Foods ${RUN}`;
   const add = await req("/api/freight/customers", { method: "POST", cookie: MEMBER, body: { name, country: "Indonesia", deliveryTerms: "CFR Jakarta", email: "buyer@zeta.example" } });
   assert.equal(add.status, 201, await add.clone().text());
   const { customer } = await add.json();
   assert.equal(customer.createdBy, "Ainu A.");
-  const dupe = await req("/api/freight/customers", { method: "POST", cookie: client.cookie, body: { name: `  ${name.toUpperCase()} ` } });
+  const dupe = await req("/api/freight/customers", { method: "POST", cookie: MEMBER, body: { name: `  ${name.toUpperCase()} ` } });
   assert.equal(dupe.status, 409, "names are matched ignoring case and spacing");
   assert.equal((await req("/api/freight/customers", { method: "POST", cookie: MEMBER, body: { name: "Bad email", email: "not-an-email" } })).status, 400);
-  const other = await (await req("/api/freight/customers", { method: "POST", cookie: client.cookie, body: { name: `Alpha Grains ${RUN}` } })).json();
+  const other = await (await req("/api/freight/customers", { method: "POST", cookie: MEMBER, body: { name: `Alpha Grains ${RUN}` } })).json();
   const put = await req(`/api/freight/customers/${customer.id}`, { method: "PUT", cookie: MEMBER, body: { ...customer, deliveryTerms: "CIF Surabaya" } });
   assert.equal((await put.json()).customer.deliveryTerms, "CIF Surabaya");
-  const { customers } = await (await req("/api/freight/customers", { cookie: client.cookie })).json();
-  const mine = customers.filter((c) => c.name.endsWith(RUN)).map((c) => c.name);
-  assert.deepEqual(mine, [`Alpha Grains ${RUN}`, name], "sorted A to Z");
+  const names = async (cookie, query = "") => (await (await req(`/api/freight/customers${query}`, { cookie })).json()).customers.map((c) => c.name).filter((n) => n.endsWith(RUN));
+  assert.deepEqual(await names(MEMBER), [`Alpha Grains ${RUN}`, name], "sorted A to Z");
+
+  // A client sees none of the staff list, and adds to its company's own list.
+  const company = `Prairie Pulse ${RUN}`;
+  const jane = await clientSession("Jane", company);
+  assert.deepEqual(await names(jane.cookie, "?view=client"), [], "the staff list is not visible to clients");
+  assert.equal((await req("/api/freight/customers?view=client", { method: "POST", cookie: jane.cookie, body: { name } })).status, 201, "same name, separate list");
+  const sam = await clientSession("Sam", company);
+  assert.deepEqual(await names(sam.cookie, "?view=client"), [name], "a colleague's link shares the company list");
+  const outsider = await clientSession("Lee", `Other Co ${RUN}`);
+  assert.deepEqual(await names(outsider.cookie, "?view=client"), [], "another company sees nothing");
+  const both = `${MEMBER}; ${jane.cookie}`;
+  assert.deepEqual(await names(both), [`Alpha Grains ${RUN}`, name], "the portal shows the staff list in a browser with both sign-ins");
+  assert.deepEqual(await names(both, "?view=client"), [name], "the client page shows the client's list");
+  const janeCustomer = (await (await req("/api/freight/customers?view=client", { cookie: jane.cookie })).json()).customers.find((c) => c.name === name);
+  assert.equal((await req(`/api/freight/customers/${janeCustomer.id}?view=client`, { method: "DELETE", cookie: MEMBER })).status, 404, "staff cannot reach into a client list by id");
+  assert.equal((await req(`/api/freight/customers/${janeCustomer.id}?view=client`, { method: "DELETE", cookie: sam.cookie })).status, 200);
+
   assert.equal((await req("/api/freight/customers", { cookie: NOT_MEMBER })).status, 401);
   for (const id of [customer.id, other.customer.id]) assert.equal((await req(`/api/freight/customers/${id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
   assert.equal((await req(`/api/freight/customers/${customer.id}`, { method: "DELETE", cookie: MEMBER })).status, 404);
@@ -262,7 +286,7 @@ await step("the member's link list shows the client link in use; revoking ends i
 });
 
 await step("members clear finished links from the history; live links are kept", async () => {
-  const fresh = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label: `Unopened ${RUN}`, expiresHours: 24 } });
+  const fresh = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label: `Unopened ${RUN}`, company: "E2E Client Co", expiresHours: 24 } });
   const freshId = (await fresh.json()).link.id;
   assert.equal((await req("/api/freight/access-links", { method: "DELETE", cookie: MEMBER })).status, 400, "a bare DELETE clears nothing");
   assert.equal((await req("/api/freight/access-links?clear=finished", { method: "DELETE", cookie: client.cookie })).status, 403);

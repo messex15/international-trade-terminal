@@ -33,11 +33,17 @@ per-unit prices are in metric tonnes, shown as MT.
   the quote, or the lowest price at the target margin when none is entered.
   Estimated earnings = final price - landed cost (all charges, commission
   included), for the whole shipment.
-- Customers: a shared list of the companies you quote to, with contact and
-  usual delivery terms. Pick one in the quote's Customer box; its delivery
-  terms fill in if the quote has none. A new name typed on a quote can be
-  added to the list from there. Everyone with Freight Desk access, client
-  links included, can see and edit the list.
+- Customers: lists of the companies you quote to, with contact and usual
+  delivery terms. Pick one in the quote's Customer box; its delivery terms
+  fill in if the quote has none. A new name typed on a quote can be added to
+  the list from there.
+  Portal staff have one list. Each client company has its own, seen only
+  through that company's access links, so colleagues' links need the same
+  company spelling. A link made before links named a company has a list of
+  its own. Staff do not see client lists, and clients do not see the staff
+  list or each other's.
+- A client's quotes default to the company on their link ("Your company
+  name" on the PDF); they can type another.
 - Saved quotes: the server recomputes totals and keeps a copy of the rates
   used. Opening a saved quote re-checks it against today's rates.
 - Print / PDF: the top of the page shows "Your company name" from the quote
@@ -56,7 +62,8 @@ only. The /freight/ page never shows Client access, even in a browser that is
 also signed in to the portal, and the link APIs accept portal members only.
 
 CLIENT LINKS
-1. Freight Desk > Client access > enter who it is for > Create link.
+1. Freight Desk > Client access > enter who it is for and their company >
+   Create link.
 2. Copy the link and send it to that person only. It works ONCE and expires
    after 1 to 30 days if unopened.
 3. They open it and press "Open the Freight Desk". That uses up the link
@@ -83,10 +90,12 @@ SETUP (once)
 
 WHERE THE DATA LIVES
 Netlify Blobs on this site: stores freight-access, freight-rates,
-freight-quotes and freight-customers. Browse them in Netlify under Data & Storage > Blobs. Writes
-use version checks so two people saving at once never overwrite each other.
-Site-wide Blobs default to Netlify's us-east-2 (Ohio) region; Netlify has no
-Canadian region.
+freight-quotes and freight-customers (customers.json for staff,
+company/<fingerprint of the company name>.json per client company). Browse
+them in Netlify under Data & Storage > Blobs. Writes use version checks so
+two people saving at once never overwrite each other. Site-wide Blobs
+default to Netlify's us-east-2 (Ohio) region; Netlify has no Canadian
+region.
 
 FILES
 freight/FreightDesk.js         The desk (React, same classes as the portal)

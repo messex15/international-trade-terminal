@@ -80,7 +80,7 @@ async function currentLinkSession(req) {
   if (!session) return null;
   const link = await accessStore().get(`link/${session.sid}`, { type: "json" });
   if (!link || link.revokedAt) return null;
-  return { kind: "link", sid: session.sid, exp: session.exp, label: link.label };
+  return { kind: "link", sid: session.sid, exp: session.exp, label: link.label, company: link.company || "" };
 }
 
 /**

@@ -2,7 +2,9 @@
 //
 // GET    /api/freight/access-links        list links
 // POST   /api/freight/access-links        create a single-use link
-//        { label, expiresHours? }   once opened, access lasts until revoked
+//        { label, company, expiresHours? }   once opened, access lasts until revoked.
+//        The company names the client's own customer list (links for the same
+//        company share it) and is the default company name on their quotes.
 // DELETE /api/freight/access-links/:id    revoke a link (also ends its session)
 // DELETE /api/freight/access-links?clear=finished
 //        clear history: deletes revoked and expired links. Links in use or
@@ -35,6 +37,7 @@ function publicView(id, link) {
   return {
     id,
     label: link.label,
+    company: link.company || "",
     createdAt: link.createdAt,
     createdBy: link.createdBy || "",
     expiresAt: link.expiresAt,
@@ -67,7 +70,9 @@ export default route(async (req, context) => {
     sessionSecret(); // links are useless without it, so fail early and clearly
     const body = await readJson(req, 5_000);
     const label = cleanText(body.label, 80);
-    if (!label) throw new HttpError(400, "Say who the link is for, such as the person's name and company.");
+    if (!label) throw new HttpError(400, "Say who the link is for, such as the person's name.");
+    const company = cleanText(body.company, 100);
+    if (!company) throw new HttpError(400, "Enter the company this person is with. It names their customer list and their quotes.");
     const expiresHours = cleanNumber(body.expiresHours ?? 72, "Link lifetime", { min: 1, max: 720 });
 
     const token = randomToken(32);
@@ -75,6 +80,7 @@ export default route(async (req, context) => {
     const now = new Date();
     const link = {
       label,
+      company,
       createdAt: now.toISOString(),
       createdBy: member.name,
       expiresAt: new Date(now.getTime() + expiresHours * 3_600_000).toISOString(),

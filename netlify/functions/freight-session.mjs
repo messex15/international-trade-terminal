@@ -25,6 +25,7 @@ export default route(async (req) => {
   return json({
     kind: session.kind,
     label: session.label,
+    company: session.kind === "link" ? session.company : "",
     canManageAccess: session.kind === "member" && !clientView,
   }, 200, headers);
 });

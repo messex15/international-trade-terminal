@@ -180,7 +180,10 @@ function assess(quote, rates) {
 
 function useApi(variant, identity) {
   return useCallback(async function api(path, { method = 'GET', body } = {}, retried = false) {
-    const res = await fetch(`/api/freight/${path}`, {
+    // The client page (/freight/) marks every request, so in a browser that is
+    // also signed in to the portal the client link wins there (session, customer list).
+    const url = `/api/freight/${path}${variant === 'standalone' ? `${path.includes('?') ? '&' : '?'}view=client` : ''}`;
+    const res = await fetch(url, {
       method,
       credentials: 'same-origin',
       headers: body ? { 'content-type': 'application/json' } : {},
@@ -282,11 +285,15 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       // The client page (/freight/) asks for the client's view of the session, so
       // a client link always wins there, even in a browser also signed in to the portal.
       const [s, r, q, c] = await Promise.all([
-        api(variant === 'standalone' ? 'session?view=client' : 'session'), api('rates'), api('quotes'),
+        api('session'), api('rates'), api('quotes'),
         // The desk still works if the customer list cannot load; it is just empty.
         api('customers').catch(() => ({ customers: [] })),
       ]);
       setSession(s);
+      // A client's quotes carry their own company name unless they typed another.
+      if (s.kind === 'link' && s.company) {
+        setQuote((q) => (!String(q.companyName || '').trim() || q.companyName === DEFAULT_COMPANY ? { ...q, companyName: s.company } : q));
+      }
       onSession?.(s);
       setRates(r.rates);
       setQuotes(q.quotes);
@@ -471,7 +478,10 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       h('b', null, quote.companyName),
       printJob && h('span', null, `Printed ${when(printJob.at)}`)),
     h('div', { className: 'pageHead' },
-      h('div', null, h('h1', null, 'Freight Desk'), h('p', null, SUBTITLES[view])),
+      h('div', null, h('h1', null, 'Freight Desk'), h('p', null,
+        view === 'customers' && session?.kind === 'link' && session.company
+          ? `Customers for ${session.company}, ready to pick on a quote.`
+          : SUBTITLES[view])),
       state.status === 'ready' && headActions.length > 0 && h('div', { className: 'headActions' }, ...headActions)),
     h('div', { className: 'fdTabs', role: 'tablist', 'aria-label': 'Freight Desk sections' },
       tabs.map(([id, label, Icon]) => h('button', {
@@ -1065,7 +1075,7 @@ const when = (iso) => (iso ? new Date(iso).toLocaleString('en-CA', { dateStyle: 
 
 function AccessView({ api, notify }) {
   const [links, setLinks] = useState(null);
-  const [form, setForm] = useState({ label: '', expiresHours: '72' });
+  const [form, setForm] = useState({ label: '', company: '', expiresHours: '72' });
   const [created, setCreated] = useState(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1077,12 +1087,13 @@ function AccessView({ api, notify }) {
   async function create(e) {
     e.preventDefault();
     if (!form.label.trim()) return notify('Say who the link is for first.', true);
+    if (!form.company.trim()) return notify('Enter the company they are with first.', true);
     setBusy(true);
     try {
-      const res = await api('access-links', { method: 'POST', body: { label: form.label, expiresHours: Number(form.expiresHours) } });
+      const res = await api('access-links', { method: 'POST', body: { label: form.label, company: form.company, expiresHours: Number(form.expiresHours) } });
       setCreated(res);
       setCopied(false);
-      setForm((f) => ({ ...f, label: '' }));
+      setForm((f) => ({ ...f, label: '', company: '' }));
       await load();
     } catch (err) {
       notify(err.message, true);
@@ -1134,16 +1145,19 @@ function AccessView({ api, notify }) {
     h('section', { className: 'card fdAccessCard' },
       h('div', { className: 'cardTitle' }, h('h3', null, 'Create a client link')),
       h('form', { onSubmit: create },
-        h('div', { className: 'formGrid' },
-          h(Field, { label: 'Who it is for' }, h('input', { value: form.label, onChange: set('label'), maxLength: 80, placeholder: 'Jane Smith, Prairie Pulse Traders' })),
+        h('div', { className: 'formGrid fdGrid3' },
+          h(Field, { label: 'Who it is for' }, h('input', { value: form.label, onChange: set('label'), maxLength: 80, placeholder: 'Jane Smith' })),
+          h(Field, { label: 'Company', hint: 'Shown on their quotes. Each company has its own customer list; spell it the same for colleagues.' },
+            h('input', { value: form.company, onChange: set('company'), maxLength: 100, list: 'fd-link-companies', placeholder: 'Prairie Pulse Traders' })),
           h(Field, { label: 'Link stops working after', hint: 'If nobody opens it by then. Once opened, access lasts until you revoke it.' },
             h('select', { value: form.expiresHours, onChange: set('expiresHours') }, [['24', '1 day'], ['72', '3 days'], ['168', '7 days'], ['720', '30 days']].map(([v, l]) => h('option', { key: v, value: v }, l))))),
-        h('div', { className: 'modalActions' }, h('button', { type: 'submit', className: 'primary', disabled: busy }, h(Link2, { size: 15 }), busy ? 'Creating…' : 'Create link'))),
+        h('div', { className: 'modalActions' }, h('button', { type: 'submit', className: 'primary', disabled: busy }, h(Link2, { size: 15 }), busy ? 'Creating…' : 'Create link')),
+        h('datalist', { id: 'fd-link-companies' }, [...new Set((links || []).map((l) => l.company).filter(Boolean))].sort().map((c) => h('option', { key: c, value: c })))),
       created && h('div', { className: 'fdNewLink' },
         h('div', { className: 'fdCombo' },
           h('input', { id: 'fd-new-link', readOnly: true, value: created.url, onFocus: (e) => e.target.select(), 'aria-label': 'New client link' }),
           h('button', { type: 'button', className: 'secondary', onClick: copy }, h(copied ? Check : Copy, { size: 15 }), copied ? 'Copied' : 'Copy link')),
-        h('p', null, `Send this to ${created.link.label} only. It works once, for one browser, and keeps them signed in until you revoke it. If it is not opened by ${when(created.link.expiresAt)}, it stops working. It is shown only now; if it gets lost, create a new one.`))),
+        h('p', null, `Send this to ${created.link.label}${created.link.company ? ` at ${created.link.company}` : ''} only. It works once, for one browser, and keeps them signed in until you revoke it. If it is not opened by ${when(created.link.expiresAt)}, it stops working. It is shown only now; if it gets lost, create a new one.`))),
     h('section', { className: 'card dataCard' },
       h('div', { className: 'toolbar' },
         h('span', { className: 'fdToolbarTitle' }, 'All client links'),
@@ -1156,9 +1170,10 @@ function AccessView({ api, notify }) {
         : links.length === 0 ? h(Empty, { label: 'No client links yet. Create one above to give someone access.' })
           : h('div', { className: 'tableWrap' },
             h('table', { className: 'fdStatic' },
-              h('thead', null, h('tr', null, ['For', 'Status', 'Created', 'Opened', 'Access', ''].map((c, k) => h('th', { key: k }, c)))),
+              h('thead', null, h('tr', null, ['For', 'Company', 'Status', 'Created', 'Opened', 'Access', ''].map((c, k) => h('th', { key: k }, c)))),
               h('tbody', null, links.map((l) => h('tr', { key: l.id },
                 h('td', null, h('b', null, l.label), l.createdBy && h('small', null, `Created by ${l.createdBy}`)),
+                h('td', null, l.company || h('small', null, 'Not set')),
                 h('td', null, h('span', { className: LINK_STATUS[l.status] || 'badge' }, l.status)),
                 h('td', null, when(l.createdAt)),
                 h('td', null, when(l.usedAt)),
