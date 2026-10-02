@@ -1,9 +1,6 @@
 // Customer lists, so a quote can pick its customer (and their usual delivery
-// terms) instead of retyping them. Portal staff have one list. Each client
-// company has its own, seen only through that company's access links; a link
-// made before links named a company has a list of its own.
-//   ?view=client  sent by the client page (/freight/): a client link wins over a
-//                 portal sign-in in the same browser, like /api/freight/session.
+// terms) instead of retyping them. One list per workspace (see workspaceOf in
+// netlify/lib/http.mjs): portal staff, each client company, or an older link.
 // GET    /api/freight/customers        the list, A to Z
 // POST   /api/freight/customers        add { name, contact, email, phone, country, deliveryTerms, notes }
 // PUT    /api/freight/customers/:id    update
@@ -15,18 +12,16 @@ import {
   HttpError,
   json,
   newId,
+  normName,
   readJson,
-  requireSession,
+  requireWorkspace,
   route,
   updateJsonDoc,
 } from "../lib/http.mjs";
-import { sha256Hex } from "../lib/session.mjs";
 
-const KEY = "customers.json";
 const EMPTY = { version: 1, customers: [] };
 const MAX_CUSTOMERS = 2000;
 
-const normName = (name) => String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
 const byName = (a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" });
 
 function cleanCustomer(body) {
@@ -45,12 +40,8 @@ function cleanCustomer(body) {
   };
 }
 
-/** The blob that holds this visitor's list. */
-async function listKey(session) {
-  if (session.kind === "member") return KEY;
-  if (session.company) return `company/${await sha256Hex(normName(session.company))}.json`;
-  return `link/${session.sid}.json`;
-}
+/** Staff: customers.json. Client workspaces: company/<id>.json or link/<id>.json. */
+const listKey = (ws) => (ws.prefix ? `${ws.prefix.slice(0, -1)}.json` : "customers.json");
 
 function assertUniqueName(customers, name, exceptId = null) {
   if (customers.some((c) => c.id !== exceptId && normName(c.name) === normName(name))) {
@@ -59,10 +50,9 @@ function assertUniqueName(customers, name, exceptId = null) {
 }
 
 export default route(async (req, context) => {
-  const clientView = new URL(req.url).searchParams.get("view") === "client";
-  const session = await requireSession(req, { preferMember: !clientView });
+  const { session, ws } = await requireWorkspace(req);
   const store = customerStore();
-  const key = await listKey(session);
+  const key = listKey(ws);
   const id = context.params?.id;
   if (id && !/^[a-z0-9]{9}-[a-z0-9]{6}$/.test(id)) throw new HttpError(404, "No customer with that id.");
 

@@ -4,6 +4,8 @@
 // GET    /api/freight/quotes/:id    one full quote with its rate snapshot
 // POST   /api/freight/quotes        save a quote
 // DELETE /api/freight/quotes/:id    delete a quote
+// Each workspace has its own saved quotes (see workspaceOf in netlify/lib/http.mjs):
+// portal staff, each client company, or an older link.
 import { BASES, CURRENCIES, RATE_TYPES, computeQuote } from "../../freight/calc.js";
 import {
   assertSameOrigin,
@@ -15,12 +17,12 @@ import {
   newId,
   quoteStore,
   readJson,
-  requireSession,
+  requireWorkspace,
   route,
   updateJsonDoc,
 } from "../lib/http.mjs";
 
-const INDEX_KEY = "index.json";
+const INDEX = "index.json";
 const EMPTY_INDEX = { version: 1, quotes: [] };
 
 function cleanCurrency(value) {
@@ -102,14 +104,16 @@ function summary(quote) {
 }
 
 export default route(async (req, context) => {
-  const session = await requireSession(req);
+  const { session, ws } = await requireWorkspace(req);
   const store = quoteStore();
+  const INDEX_KEY = `${ws.prefix}${INDEX}`;
+  const quoteKey = (quoteId) => `${ws.prefix}quote/${quoteId}`;
   const id = context.params?.id;
   if (id && !/^[a-z0-9]{9}-[a-z0-9]{6}$/.test(id)) throw new HttpError(404, "No quote with that id.");
 
   if (req.method === "GET") {
     if (id) {
-      const quote = await store.get(`quote/${id}`, { type: "json" });
+      const quote = await store.get(quoteKey(id), { type: "json" });
       if (!quote) throw new HttpError(404, "No quote with that id.");
       return json({ quote });
     }
@@ -133,7 +137,7 @@ export default route(async (req, context) => {
       createdAt: new Date().toISOString(),
       createdBy: session.label,
     };
-    await store.setJSON(`quote/${quote.id}`, quote);
+    await store.setJSON(quoteKey(quote.id), quote);
     await updateJsonDoc(store, INDEX_KEY, EMPTY_INDEX, (index) => {
       index.quotes = [summary(quote), ...index.quotes.filter((q) => q.id !== quote.id)];
       return { doc: index, value: null };
@@ -142,11 +146,12 @@ export default route(async (req, context) => {
   }
 
   if (req.method === "DELETE" && id) {
+    if (!(await store.get(quoteKey(id)))) throw new HttpError(404, "No quote with that id.");
     await updateJsonDoc(store, INDEX_KEY, EMPTY_INDEX, (index) => {
       index.quotes = index.quotes.filter((q) => q.id !== id);
       return { doc: index, value: null };
     });
-    await store.delete(`quote/${id}`);
+    await store.delete(quoteKey(id));
     return json({ ok: true });
   }
 

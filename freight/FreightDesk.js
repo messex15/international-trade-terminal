@@ -427,6 +427,18 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     }
   }
 
+  async function deleteRate(rate) {
+    const what = `${rateText(rate)} from ${rate.provider}, effective ${formatDate(rate.effectiveFrom)}`;
+    if (!confirm(`Delete this ${labelInSentence(rate)} rate (${what})? This cannot be undone. Saved quotes keep their own copy of it.`)) return;
+    try {
+      await api(`rates/${rate.id}`, { method: 'DELETE' });
+      setRates((all) => all.filter((r) => r.id !== rate.id));
+      notify('Rate deleted.');
+    } catch (err) {
+      notify(err.message, true);
+    }
+  }
+
   async function setArchived(rate, archived) {
     try {
       const { rate: updated } = await api(`rates/${rate.id}`, { method: 'PATCH', body: { archived } });
@@ -501,6 +513,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       onAdd: (r) => { addLine(lineFromRate(r)); setOpenLane(null); setTab('quote'); notify(`Added ${labelInSentence(r)} from ${r.provider} to the quote.`); },
       onEdit: (r) => { setOpenLane(null); setRateEditor({ rate: r }); },
       onArchive: setArchived,
+      onDelete: deleteRate,
     }),
     picker && h(RatePicker, { lanes: activeLanes, quote, onAdd: (r) => addLine(lineFromRate(r)), onClose: () => setPicker(false) }),
     customerEditor && h(CustomerEditor, {
@@ -775,7 +788,7 @@ function RatesView({ lanes, onOpen, onCapture }) {
         !lanes.length && h(Button, { kind: 'primary', icon: Plus, onClick: onCapture }, 'Capture rate')));
 }
 
-function LaneDrawer({ lane, onClose, onAdd, onEdit, onArchive }) {
+function LaneDrawer({ lane, onClose, onAdd, onEdit, onArchive, onDelete }) {
   const r = lane.latest;
   return h(Overlay, { onClose },
     h('aside', { className: 'drawer' },
@@ -791,7 +804,8 @@ function LaneDrawer({ lane, onClose, onAdd, onEdit, onArchive }) {
         h('div', { className: 'fdDrawerActions' },
           !r.archivedAt && h(Button, { kind: 'primary', icon: Plus, onClick: () => onAdd(r) }, 'Add to quote'),
           h(Button, { icon: PencilLine, onClick: () => onEdit(r) }, 'Correct'),
-          h(Button, { icon: r.archivedAt ? ArchiveRestore : Archive, onClick: () => onArchive(r, !r.archivedAt) }, r.archivedAt ? 'Restore' : 'Archive')),
+          h(Button, { icon: r.archivedAt ? ArchiveRestore : Archive, onClick: () => onArchive(r, !r.archivedAt) }, r.archivedAt ? 'Restore' : 'Archive'),
+          h(Button, { icon: Trash2, className: 'secondary fdDanger', onClick: () => onDelete(r) }, 'Delete')),
         h('div', { className: 'detailBlock' },
           h('small', null, `History on this lane (${lane.history.length})`),
           h('div', { className: 'fdHistory' }, lane.history.map((v, i) => {
@@ -799,7 +813,8 @@ function LaneDrawer({ lane, onClose, onAdd, onEdit, onArchive }) {
             return h('div', { key: v.id, className: v.id === r.id ? 'current' : '' },
               h('span', null, h('b', null, rateText(v)), h('small', null, `Effective ${formatDate(v.effectiveFrom)}${v.source ? `. ${v.source}` : ''}${v.archivedAt ? '. Archived' : ''}`)),
               h('span', { className: 'fdHistoryEnd' }, h(Change, { value: v.archivedAt ? null : percentChange(before, v) }),
-                v.id !== r.id && h('button', { type: 'button', className: 'fdLinkButton', onClick: () => onArchive(v, !v.archivedAt) }, v.archivedAt ? 'Restore' : 'Archive')));
+                v.id !== r.id && h('button', { type: 'button', className: 'fdLinkButton', onClick: () => onArchive(v, !v.archivedAt) }, v.archivedAt ? 'Restore' : 'Archive'),
+                v.id !== r.id && h('button', { type: 'button', className: 'fdLinkButton fdDanger', onClick: () => onDelete(v), 'aria-label': `Delete the rate effective ${formatDate(v.effectiveFrom)}` }, 'Delete')));
           }))),
         r.revisions?.length > 0 && h('div', { className: 'notice' }, h(History, { size: 18 }),
           h('span', null, `Corrected ${r.revisions.length} time${r.revisions.length === 1 ? '' : 's'}. Previous values are kept in the rate's record.`)))));

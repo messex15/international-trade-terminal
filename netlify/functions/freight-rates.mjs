@@ -3,6 +3,10 @@
 // POST  /api/freight/rates          capture a new rate
 // PUT   /api/freight/rates/:id      correct a rate (the old values are kept as a revision)
 // PATCH /api/freight/rates/:id      { archived: true | false }
+// DELETE /api/freight/rates/:id     delete a rate for good (saved quotes keep their own copy)
+//
+// Each workspace has its own rate memory (see workspaceOf in netlify/lib/http.mjs):
+// portal staff, each client company, or an older link.
 //
 // Rates live in one JSON document written with optimistic locking. A
 // trading desk captures hundreds of rates a year, not millions, so one
@@ -18,12 +22,12 @@ import {
   newId,
   rateStore,
   readJson,
-  requireSession,
+  requireWorkspace,
   route,
   updateJsonDoc,
 } from "../lib/http.mjs";
 
-const DOC_KEY = "rates.json";
+const DOC = "rates.json";
 const EMPTY = { version: 1, rates: [] };
 const EDITABLE = [
   "type", "chargeName", "provider", "origin", "destination", "commodity", "basis",
@@ -78,8 +82,9 @@ function latestOnLane(rates, key, excludeId) {
 }
 
 export default route(async (req, context) => {
-  const session = await requireSession(req);
+  const { session, ws } = await requireWorkspace(req);
   const store = rateStore();
+  const DOC_KEY = `${ws.prefix}${DOC}`;
   const id = context.params?.id;
 
   if (req.method === "GET") {
@@ -117,6 +122,14 @@ export default route(async (req, context) => {
     return json({ rate });
   }
 
+  if (req.method === "DELETE") {
+    await updateJsonDoc(store, DOC_KEY, EMPTY, (doc) => {
+      if (!doc.rates.some((r) => r.id === id)) throw new HttpError(404, "That rate no longer exists.");
+      return { doc: { ...doc, rates: doc.rates.filter((r) => r.id !== id) }, value: null };
+    });
+    return json({ ok: true });
+  }
+
   if (req.method === "PATCH") {
     if (typeof body.archived !== "boolean") throw new HttpError(400, "Send { archived: true } or { archived: false }.");
     const rate = await updateJsonDoc(store, DOC_KEY, EMPTY, (doc) => {
@@ -134,5 +147,5 @@ export default route(async (req, context) => {
 
 export const config = {
   path: ["/api/freight/rates", "/api/freight/rates/:id"],
-  method: ["GET", "POST", "PUT", "PATCH"],
+  method: ["GET", "POST", "PUT", "PATCH", "DELETE"],
 };

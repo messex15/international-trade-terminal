@@ -5,7 +5,9 @@ A rate memory and landed cost calculator for trading. Quantities and
 per-unit prices are in metric tonnes, shown as MT.
 - Rate memory: capture every rail tariff, loading charge, port charge and
   carrier offer as it arrives. Each lane (carrier, route, commodity, billing
-  basis) keeps its history and shows the % change between rates.
+  basis) keeps its history and shows the % change between rates. A rate can
+  be corrected, archived, or deleted for good (saved quotes keep their own
+  copy of the rates they used).
 - Landed cost: build a quote from those rates. Railcar, container and
   truckload charges count whole units. USD converts at a typed rate or the
   Bank of Canada daily rate. Shows the lowest price for the target margin,
@@ -37,11 +39,13 @@ per-unit prices are in metric tonnes, shown as MT.
   delivery terms. Pick one in the quote's Customer box; its delivery terms
   fill in if the quote has none. A new name typed on a quote can be added to
   the list from there.
-  Portal staff have one list. Each client company has its own, seen only
-  through that company's access links, so colleagues' links need the same
-  company spelling. A link made before links named a company has a list of
-  its own. Staff do not see client lists, and clients do not see the staff
-  list or each other's.
+- Workspaces: rate memory, saved quotes and customers are kept per
+  workspace. Portal staff share one (everything saved before workspaces
+  existed stays there). Each client company has its own, seen only through
+  that company's access links, so colleagues' links need the same company
+  spelling. A link made before links named a company has one of its own.
+  Staff do not see client workspaces, and clients do not see the staff
+  workspace or each other's.
 - A client's quotes default to the company on their link ("Your company
   name" on the PDF); they can type another.
 - Saved quotes: the server recomputes totals and keeps a copy of the rates
@@ -90,8 +94,10 @@ SETUP (once)
 
 WHERE THE DATA LIVES
 Netlify Blobs on this site: stores freight-access, freight-rates,
-freight-quotes and freight-customers (customers.json for staff,
-company/<fingerprint of the company name>.json per client company). Browse
+freight-quotes and freight-customers. Staff data uses plain keys
+(rates.json, index.json and quote/<id>, customers.json). A client company's
+data sits under company/<fingerprint of the company name>/ (its customers at
+company/<fingerprint>.json); an older link's under link/<link id>/. Browse
 them in Netlify under Data & Storage > Blobs. Writes use version checks so
 two people saving at once never overwrite each other. Site-wide Blobs
 default to Netlify's us-east-2 (Ohio) region; Netlify has no Canadian

@@ -145,17 +145,31 @@ const RUN = Date.now().toString(36);
 const lane = { type: "rail", provider: "CN", origin: "Shaunavon, SK", destination: "Vancouver, BC", commodity: `Yellow peas ${RUN}`, basis: "per_car", currency: "CAD", capacity_t: 90 };
 let firstRateId;
 
-await step("rates captured by a member and a client share one lane history", async () => {
+await step("rate memory is kept apart: staff, and each client company", async () => {
   const first = await req("/api/freight/rates", { method: "POST", cookie: MEMBER, body: { ...lane, amount: 4500, effectiveFrom: "2026-08-01", validUntil: "2026-10-31", source: "Email from CN, Aug 1" } });
   assert.equal(first.status, 201);
   const firstRate = (await first.json()).rate;
   firstRateId = firstRate.id;
   assert.equal(firstRate.createdBy, "Ainu A.");
-  const second = await req("/api/freight/rates", { method: "POST", cookie: client.cookie, body: { ...lane, amount: 4725, effectiveFrom: "2026-09-15", source: "Email from CN, Sep 15" } });
-  const data = await second.json();
-  assert.equal(data.rate.createdBy, "E2E client");
-  assert.equal(data.previous.id, firstRateId);
-  assert.ok(Math.abs(data.changePct - 5) < 1e-9);
+  const second = await (await req("/api/freight/rates", { method: "POST", cookie: MEMBER, body: { ...lane, amount: 4725, effectiveFrom: "2026-09-15", source: "Email from CN, Sep 15" } })).json();
+  assert.equal(second.previous.id, firstRateId, "staff lane history");
+  assert.ok(Math.abs(second.changePct - 5) < 1e-9);
+
+  const onLane = (rates) => rates.filter((r) => r.commodity === lane.commodity);
+  assert.deepEqual(onLane((await (await req("/api/freight/rates?view=client", { cookie: client.cookie })).json()).rates), [], "clients do not see staff rates");
+  const theirs = await (await req("/api/freight/rates?view=client", { method: "POST", cookie: client.cookie, body: { ...lane, amount: 4800, effectiveFrom: "2026-09-20" } })).json();
+  assert.equal(theirs.previous, null, "a client's lane history starts in its own workspace");
+  assert.equal(theirs.rate.createdBy, "E2E client");
+  const colleague = await clientSession("E2E colleague");
+  assert.deepEqual(onLane((await (await req("/api/freight/rates?view=client", { cookie: colleague.cookie })).json()).rates).map((r) => r.id), [theirs.rate.id], "same company, same rate memory");
+  const outsider = await clientSession("Outsider", `Other Co ${RUN}`);
+  assert.deepEqual(onLane((await (await req("/api/freight/rates?view=client", { cookie: outsider.cookie })).json()).rates), []);
+  assert.ok(!(await (await req("/api/freight/rates", { cookie: MEMBER })).json()).rates.some((r) => r.id === theirs.rate.id), "staff do not see client rates");
+  for (const method of ["PATCH", "DELETE"]) {
+    const r = await req(`/api/freight/rates/${theirs.rate.id}`, { method, cookie: MEMBER, ...(method === "PATCH" ? { body: { archived: true } } : {}) });
+    assert.equal(r.status, 404, `staff cannot ${method} a client rate`);
+  }
+  assert.equal((await req(`/api/freight/rates/${theirs.rate.id}?view=client`, { method: "DELETE", cookie: colleague.cookie })).status, 200);
 });
 
 await raceStep("simultaneous saves do not overwrite each other", async () => {
@@ -175,18 +189,32 @@ await step("corrections keep revisions; archive and restore work", async () => {
   assert.equal((await (await req(`/api/freight/rates/${firstRateId}`, { method: "PATCH", cookie: MEMBER, body: { archived: false } })).json()).rate.archivedAt, null);
 });
 
-await step("quotes are recomputed on the server, listed and deleted", async () => {
+await step("rates can be deleted for good", async () => {
+  const made = await (await req("/api/freight/rates", { method: "POST", cookie: MEMBER, body: { ...lane, destination: `Delete me ${RUN}`, amount: 1, effectiveFrom: "2026-09-01" } })).json();
+  assert.equal((await req(`/api/freight/rates/${made.rate.id}`, { method: "DELETE", cookie: MEMBER, headers: { origin: "https://evil.example" } })).status, 403);
+  assert.equal((await req(`/api/freight/rates/${made.rate.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+  assert.ok(!(await (await req("/api/freight/rates", { cookie: MEMBER })).json()).rates.some((r) => r.id === made.rate.id));
+  assert.equal((await req(`/api/freight/rates/${made.rate.id}`, { method: "DELETE", cookie: MEMBER })).status, 404);
+});
+
+await step("saved quotes are recomputed on the server and kept per workspace", async () => {
   const body = {
     companyName: "Prairie Pulse Traders", reference: `Q-E2E-${RUN}`, buyer: "PT Example", commodity: lane.commodity, quantity_t: 180, quoteDate: "2026-09-30",
     purchasePrice: 400, purchaseCurrency: "CAD", usdcad: 1.4, targetMarginPct: 10, minMarginPct: 5, salePrice: 380, saleCurrency: "USD",
     lines: [{ rateId: firstRateId, ...lane, amount: 4500, effectiveFrom: "2026-08-01", validUntil: "2026-10-31" }],
   };
-  const res = await req("/api/freight/quotes", { method: "POST", cookie: client.cookie, body });
+  const res = await req("/api/freight/quotes?view=client", { method: "POST", cookie: client.cookie, body });
   assert.equal(res.status, 201);
   const { quote } = await res.json();
   assert.ok(Math.abs(quote.result.landedPerTonneCAD - 450) < 1e-9);
   assert.equal(quote.inputs.companyName, "Prairie Pulse Traders", "the PDF company name is kept with the quote");
-  assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+  const ids = async (cookie, q = "") => (await (await req(`/api/freight/quotes${q}`, { cookie })).json()).quotes.map((x) => x.id);
+  assert.ok((await ids(client.cookie, "?view=client")).includes(quote.id));
+  assert.ok(!(await ids(MEMBER)).includes(quote.id), "staff do not see client quotes");
+  assert.equal((await req(`/api/freight/quotes/${quote.id}`, { cookie: MEMBER })).status, 404);
+  assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 404, "staff cannot delete a client quote");
+  assert.equal((await req(`/api/freight/quotes/${quote.id}?view=client`, { method: "DELETE", cookie: client.cookie })).status, 200);
+  assert.ok(!(await ids(client.cookie, "?view=client")).includes(quote.id));
 });
 
 await step("grade, customer, standard rows and a commission on the sale price are saved and recomputed", async () => {

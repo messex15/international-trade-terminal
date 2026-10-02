@@ -1,6 +1,6 @@
 // Helpers shared by the serverless functions (Node only).
 import { getStore } from "@netlify/blobs";
-import { COOKIE_NAME, IDENTITY_COOKIE, decodeCookieValue, env, verifyMember, verifySession } from "./session.mjs";
+import { COOKIE_NAME, IDENTITY_COOKIE, decodeCookieValue, env, sha256Hex, verifyMember, verifySession } from "./session.mjs";
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -99,6 +99,33 @@ export async function requireSession(req, { preferMember = false } = {}) {
     if (link) return link;
   }
   throw new HttpError(401, "Your session has ended. Sign in again or open a new access link.");
+}
+
+export const normName = (name) => String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * Whose data a request works on: rate memory, saved quotes and customers.
+ * Portal staff share one workspace (blob keys with no prefix, where the data
+ * has always been). Each client company has its own, under
+ * company/<fingerprint of the company name>/, shared by that company's links.
+ * A link made before links named a company has one of its own, under
+ * link/<link id>/.
+ */
+export async function workspaceOf(session) {
+  if (session.kind === "member") return { kind: "staff", prefix: "" };
+  if (session.company) return { kind: "company", prefix: `company/${await sha256Hex(normName(session.company))}/` };
+  return { kind: "link", prefix: `link/${session.sid}/` };
+}
+
+/**
+ * The visitor and their workspace. The client page (/freight/) sends
+ * ?view=client, so in a browser that is also signed in to the portal the
+ * client link wins there and the portal sign-in wins in the portal.
+ */
+export async function requireWorkspace(req) {
+  const clientView = new URL(req.url).searchParams.get("view") === "client";
+  const session = await requireSession(req, { preferMember: !clientView });
+  return { session, ws: await workspaceOf(session) };
 }
 
 /** Only portal members manage client links. */

@@ -51,6 +51,7 @@
 .fdFlags li.warning{color:#9b6c17}
 .fdFlags li.error{color:#a0473f}
 .fdLinkButton{border:0;background:none;padding:0;margin-left:4px;color:#285f96;font-weight:700;font-size:inherit;text-decoration:underline;text-underline-offset:2px}
+.fdLinkButton.fdDanger{color:#a0473f}
 .fdLineEdit{display:grid;grid-template-columns:1.1fr 1.5fr .9fr .7fr 1.1fr .9fr;gap:6px;margin-bottom:4px}
 .fdLineType{display:flex;align-items:center;font-size:10px;font-weight:700;color:#21354a;padding:7px 0}
 .fd .fdUnused .fdNum{color:#a3aebb}
