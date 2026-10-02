@@ -169,7 +169,7 @@ await step("corrections keep revisions; archive and restore work", async () => {
 
 await step("quotes are recomputed on the server, listed and deleted", async () => {
   const body = {
-    reference: `Q-E2E-${RUN}`, buyer: "PT Example", commodity: lane.commodity, quantity_t: 180, quoteDate: "2026-09-30",
+    companyName: "Prairie Pulse Traders", reference: `Q-E2E-${RUN}`, buyer: "PT Example", commodity: lane.commodity, quantity_t: 180, quoteDate: "2026-09-30",
     purchasePrice: 400, purchaseCurrency: "CAD", usdcad: 1.4, targetMarginPct: 10, minMarginPct: 5, salePrice: 380, saleCurrency: "USD",
     lines: [{ rateId: firstRateId, ...lane, amount: 4500, effectiveFrom: "2026-08-01", validUntil: "2026-10-31" }],
   };
@@ -177,6 +177,7 @@ await step("quotes are recomputed on the server, listed and deleted", async () =
   assert.equal(res.status, 201);
   const { quote } = await res.json();
   assert.ok(Math.abs(quote.result.landedPerTonneCAD - 450) < 1e-9);
+  assert.equal(quote.inputs.companyName, "Prairie Pulse Traders", "the PDF company name is kept with the quote");
   assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
 });
 

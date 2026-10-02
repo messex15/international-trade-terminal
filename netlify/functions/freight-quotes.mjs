@@ -53,6 +53,7 @@ function cleanInputs(body) {
   const lines = Array.isArray(body.lines) ? body.lines : [];
   if (lines.length > 40) throw new HttpError(400, "A quote can have at most 40 cost lines.");
   return {
+    companyName: cleanText(body.companyName, 100),
     reference: cleanText(body.reference, 60),
     buyer: cleanText(body.buyer, 100),
     commodity: cleanText(body.commodity, 60),

@@ -80,9 +80,13 @@ const DEFAULT_BASIS = {
 };
 const COMMODITIES = ['Yellow peas', 'Green peas', 'Red lentils', 'Green lentils', 'Fava beans', 'Chickpeas', 'Canola', 'Flax seed', 'Mustard seed', 'Durum', 'Oats'];
 
+// Printed at the top of the PDF. Each person can change it; new quotes keep
+// the last name used in that browser, and saved quotes keep their own.
+const DEFAULT_COMPANY = 'International Trade Terminal';
+
 function blankQuote() {
   return {
-    reference: '', buyer: '', commodity: '', destination: '', quantity_t: '', quoteDate: isoToday(),
+    companyName: DEFAULT_COMPANY, reference: '', buyer: '', commodity: '', destination: '', quantity_t: '', quoteDate: isoToday(),
     purchasePrice: '', purchaseCurrency: 'CAD', usdcad: '', usdcadDate: '',
     targetMarginPct: 8, minMarginPct: 4, salePrice: '', saleCurrency: 'USD', lines: [],
   };
@@ -214,6 +218,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   const [picker, setPicker] = useState(false);
   const [openQuote, setOpenQuote] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [printJob, setPrintJob] = useState(null);
 
   const notify = useCallback((text, bad = false) => setToast({ text, bad, at: Date.now() }), []);
   useEffect(() => {
@@ -270,15 +275,44 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
 
   function newQuote() {
     if (quote.lines.length && !confirm('Start a new quote? The current one is cleared unless you saved it.')) return;
-    setQuote((q) => ({ ...blankQuote(), targetMarginPct: q.targetMarginPct, minMarginPct: q.minMarginPct, usdcad: q.usdcad, usdcadDate: q.usdcadDate }));
+    setQuote((q) => ({ ...blankQuote(), companyName: q.companyName, targetMarginPct: q.targetMarginPct, minMarginPct: q.minMarginPct, usdcad: q.usdcad, usdcadDate: q.usdcadDate }));
   }
 
   function printQuote() {
+    const company = String(quote.companyName || '').trim();
+    const ref = String(quote.reference || '').trim();
+    // Chrome and Edge suggest the page title as the PDF file name.
+    const title = [company, ref ? `Quote ${ref}` : 'Quote'].filter(Boolean).join(' - ');
+    setPrintJob({ at: new Date().toISOString(), title });
+  }
+
+  // Runs after the print header has rendered with the company name and time.
+  useEffect(() => {
+    if (!printJob) return undefined;
+    // Zero page margins leave the browser no room for its own header and footer
+    // (page title, date, web address, page numbers); the quote's padding stands
+    // in for the margins. Added only while a quote prints, so printing any other
+    // portal page keeps normal margins.
+    const pageRule = document.createElement('style');
+    pageRule.textContent = '@page { margin: 0; }';
+    document.head.appendChild(pageRule);
+    const savedTitle = document.title;
+    document.title = printJob.title;
     document.body.classList.add('fdPrinting');
-    const done = () => { document.body.classList.remove('fdPrinting'); window.removeEventListener('afterprint', done); };
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener('afterprint', done);
+      pageRule.remove();
+      document.title = savedTitle;
+      document.body.classList.remove('fdPrinting');
+      setPrintJob(null);
+    };
     window.addEventListener('afterprint', done);
     window.print();
-  }
+    return done;
+  }, [printJob]);
 
   function exportCsv() {
     const cols = ['id', 'type', 'provider', 'origin', 'destination', 'commodity', 'basis', 'amount', 'currency', 'capacity_t', 'effectiveFrom', 'validUntil', 'source', 'notes', 'createdAt', 'createdBy', 'archivedAt'];
@@ -296,7 +330,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   async function openSavedQuote(id) {
     try {
       const { quote: saved } = await api(`quotes/${id}`);
-      const next = { ...blankQuote(), ...saved.inputs };
+      const next = { ...blankQuote(), companyName: quote.companyName, ...saved.inputs };
       setQuote(next);
       setOpenQuote(null);
       setTab('quote');
@@ -365,6 +399,9 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   const lane = openLane ? lanes.find((l) => l.key === openLane) : null;
 
   return h('div', { className: 'fd', 'data-variant': variant },
+    view === 'quote' && h('div', { className: 'fdPrintHead' },
+      h('b', null, quote.companyName),
+      printJob && h('span', null, `Printed ${when(printJob.at)}`)),
     h('div', { className: 'pageHead' },
       h('div', null, h('h1', null, 'Freight Desk'), h('p', null, SUBTITLES[view])),
       state.status === 'ready' && headActions.length > 0 && h('div', { className: 'headActions' }, ...headActions)),
@@ -423,6 +460,8 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
       h('section', { className: 'card' },
         h('div', { className: 'cardTitle' }, h('h3', null, 'Deal')),
         h('div', { className: 'formGrid fdGrid3' },
+          h(Field, { label: 'Your company name', hint: 'Printed at the top of the PDF.', className: 'fdNoPrint' },
+            input('companyName', { maxLength: 100, placeholder: DEFAULT_COMPANY })),
           h(Field, { label: 'Quote reference' }, input('reference', { maxLength: 60, placeholder: 'Q-2026-041' })),
           h(Field, { label: 'Buyer' }, input('buyer', { maxLength: 100 })),
           h(Field, { label: 'Commodity' }, input('commodity', { maxLength: 60, list: 'fd-commodities' })),
@@ -441,7 +480,7 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
             h('span', { className: 'fdCombo' }, num('salePrice', { placeholder: 'Optional' }), currency('saleCurrency', 'Offer currency'))),
           h(Field, { label: 'Target margin (%)' }, num('targetMarginPct', { max: 99.9 })),
           h(Field, { label: 'Margin floor (%)', hint: 'Never quote below this.' }, num('minMarginPct', { max: 99.9 })))),
-      h('section', { className: 'card dataCard' },
+      h('section', { className: 'card dataCard fdChargesCard' },
         h('div', { className: 'cardTitle' }, h('h3', null, 'Freight and charges')),
         result.lines.length
           ? h('div', { className: 'tableWrap' },
@@ -480,14 +519,19 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
   const field = (key, props) => h('input', { value: line[key] ?? '', onChange: setLine(i, key), ...props });
   return h('tr', null,
     h('td', { colSpan: 2, className: 'fdWrap' },
-      h('div', { className: 'fdLineEdit' },
+      // On paper the edit boxes would cut text off, so print the charge as text.
+      h('div', { className: 'fdPrintOnly' },
+        h('b', null, line.description || RATE_TYPES[line.type]),
+        h('small', null, `${RATE_TYPES[line.type]}, one-off charge`),
+        line.amount !== '' && line.amount !== null && h('small', null, rateText(line))),
+      h('div', { className: 'fdLineEdit fdNoPrint' },
         h('select', { value: line.type, onChange: setLine(i, 'type'), 'aria-label': 'Charge type' }, Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v))),
         field('description', { placeholder: 'Charged by or what it is', maxLength: 120, 'aria-label': 'Description' }),
         field('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: 'Amount', 'aria-label': 'Amount' }),
         h('select', { value: line.currency, onChange: setLine(i, 'currency'), 'aria-label': 'Currency' }, h('option', null, 'CAD'), h('option', null, 'USD')),
         h('select', { value: line.basis, onChange: setLine(i, 'basis'), 'aria-label': 'Billed' }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label))),
         needsCap && field('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: `Tonnes per ${BASES[line.basis].unit}`, 'aria-label': 'Tonnes per unit' })),
-      h('small', null, 'One-off charge, not saved to rate memory.'), units, flagList),
+      h('small', { className: 'fdNoPrint' }, 'One-off charge, not saved to rate memory.'), units, flagList),
     ...computed, remove);
 }
 

@@ -15,6 +15,11 @@ A rate memory and landed cost calculator for trading.
   "holds until" the first expiry among the rates it uses.
 - Saved quotes: the server recomputes totals and keeps a copy of the rates
   used. Opening a saved quote re-checks it against today's rates.
+- Print / PDF: the top of the page shows "Your company name" from the quote
+  (default International Trade Terminal) and the time it was printed. New
+  quotes keep the last name used in that browser; saved quotes keep their own.
+  The browser's own header and footer (page title, web address, page numbers)
+  are switched off while a quote prints.
 
 WHO CAN USE IT
 /app/#Freight Desk   Staff. Sidebar > Operations > Freight Desk. Uses the

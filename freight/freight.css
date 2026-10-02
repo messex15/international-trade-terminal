@@ -134,11 +134,29 @@
 }
 
 /* ---------- Print (only while the Freight Desk prints a quote) ---------- */
+.fdPrintHead,.fdPrintOnly{display:none}
 @media print{body.fdPrinting{background:#fff}
+body.fdPrinting .fd{padding:12mm 12mm 10mm;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+body.fdPrinting .fdPrintHead{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding-bottom:9px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+body.fdPrinting .fdPrintHead b{font-size:17px;color:#16263a}
+body.fdPrinting .fdPrintHead span{font-size:10px;color:#758398;white-space:nowrap}
+body.fdPrinting .fdNoPrint{display:none!important}
 body.fdPrinting .sidebar,body.fdPrinting .topbar,body.fdPrinting .demoStrip,body.fdPrinting .scrim,body.fdPrinting .fdBar,body.fdPrinting .fdTabs,body.fdPrinting .headActions,body.fdPrinting .fdCardFoot,body.fdPrinting .fdSummaryActions,body.fdPrinting .toast,body.fdPrinting .fd .iconButton{display:none!important}
 body.fdPrinting .mainArea{margin-left:0!important}
 body.fdPrinting .contentArea{padding:0!important;max-width:none}
 body.fdPrinting .fdCalc{grid-template-columns:1fr 300px}
+/* Paper cannot scroll sideways: the charges table gets the full page width below
+   the Deal, Price and summary cards, and wraps instead of being cut off. */
+body.fdPrinting .fdCalcMain{display:contents}
+body.fdPrinting .fdCalc{grid-template-rows:auto 1fr auto}
+body.fdPrinting .fd select{-webkit-appearance:none;appearance:none}
+body.fdPrinting .fd .fdCombo button{display:none}
+body.fdPrinting .fdPrintOnly{display:block}
+body.fdPrinting .fdCalcSide{grid-column:2;grid-row:1/span 2}
+body.fdPrinting .fdChargesCard{grid-column:1/-1}
+body.fdPrinting .fd .dataCard,body.fdPrinting .fd .tableWrap{overflow:visible}
+body.fdPrinting .fd table{min-width:0}
+body.fdPrinting .fd tr{break-inside:avoid}
 body.fdPrinting .fdSummary{position:static}
 body.fdPrinting .card{box-shadow:none}
 body.fdPrinting .fd input,body.fdPrinting .fd select{border:0;background:transparent;padding-left:0}
