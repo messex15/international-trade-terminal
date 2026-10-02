@@ -46,8 +46,11 @@ per-unit prices are in metric tonnes, shown as MT.
   charges, commission included), for the whole shipment.
 - Customers: lists of the companies you quote to, with contact and usual
   delivery terms. Pick one in the quote's Customer box; its delivery terms
-  fill in if the quote has none. A new name typed on a quote can be added to
-  the list from there.
+  fill in if the quote has none. Saving a quote for a customer not on the
+  list adds them (matched ignoring case and spacing), with the quote's
+  delivery terms as their usual terms. Click a customer to see their details
+  and the saved quotes made out to them; a quote saved under a customer's
+  earlier name is not matched after a rename.
 - Workspaces: rate memory, saved quotes and customers are kept per
   workspace. Portal staff share one (everything saved before workspaces
   existed stays there). Each client company has its own, seen only through
@@ -125,7 +128,8 @@ freight/index.html, main.js    The client page at /freight/
 freight/access/                Where client links land (styled like /login)
 netlify/edge-functions/        Gate for /freight/* (members or client links)
 netlify/functions/             APIs under /api/freight/*
-netlify/lib/                   Sessions, Identity check, validation
+netlify/lib/                   Sessions, Identity check, validation,
+                               customer lists
 _redirects                     Now also hides server files from the public site
 
 LOCAL TESTING

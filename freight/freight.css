@@ -107,6 +107,13 @@
 .fdHistory b{display:block;font-size:11px;color:#253b50}
 .fdHistory>div.current b{color:#234b6f}
 .fd .fdHistory small{display:block;font-size:9px;color:#8190a0;margin-top:2px;text-transform:none;letter-spacing:0}
+.fd .fdHistory>button.fdQuoteRow{display:flex;justify-content:space-between;align-items:center;gap:10px;width:calc(100% + 12px);margin:0 -6px;padding:9px 6px;border:0;border-top:1px solid #edf1f5;border-radius:6px;background:none;font:inherit;text-align:left;cursor:pointer}
+.fd .fdHistory>button.fdQuoteRow:first-child{border-top:0}
+.fd .fdHistory>button.fdQuoteRow:hover{background:#f7fafc}
+.fd .fdHistory>button.fdQuoteRow:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+.fdCustomerQuotes{margin-top:12px}
+.fdCustomerQuotes .fdHolds{margin:8px 0 0;padding:0}
+.fd .drawerBody>.fdHolds{margin:0 0 4px}
 .fdHistoryEnd{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:10px;white-space:nowrap}
 .modal.fdWideModal{width:min(920px,96vw)}
 .modal.fd .toolbar{border-top:0}

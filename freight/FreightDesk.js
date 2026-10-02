@@ -294,6 +294,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   const fitRef = useRef(null);
   const [customers, setCustomers] = useState([]);
   const [customerEditor, setCustomerEditor] = useState(null);
+  const [openCustomer, setOpenCustomer] = useState(null);
 
   const notify = useCallback((text, bad = false) => setToast({ text, bad, at: Date.now() }), []);
   useEffect(() => {
@@ -348,10 +349,13 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   async function saveQuote() {
     setSaving(true);
     try {
-      const { quote: saved } = await api('quotes', { method: 'POST', body: quote });
+      const { quote: saved, customerAdded } = await api('quotes', { method: 'POST', body: quote });
+      // A customer not on the list yet is added when the quote is saved.
+      if (customerAdded) setCustomers((all) => sortCustomers([...all.filter((c) => c.id !== customerAdded.id), customerAdded]));
+      const added = customerAdded ? ` ${customerAdded.name} added to your customers.` : '';
       notify(saved.result.final && saved.result.final.earningsPerTonneCAD < 0
-        ? 'Quote saved. At its final price it loses money.'
-        : `Quote saved${saved.inputs.reference ? ` as ${saved.inputs.reference}` : ''}.`);
+        ? `Quote saved. At its final price it loses money.${added}`
+        : `Quote saved${saved.inputs.reference ? ` as ${saved.inputs.reference}` : ''}.${added}`);
       setQuotes((await api('quotes')).quotes);
     } catch (err) {
       notify(err.message, true);
@@ -523,7 +527,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   } else if (view === 'quotes') {
     body = h(QuotesView, { quotes, onOpen: setOpenQuote });
   } else if (view === 'customers') {
-    body = h(CustomersView, { customers, quotes, onOpen: (c) => setCustomerEditor({ customer: c }), onAdd: () => setCustomerEditor({}) });
+    body = h(CustomersView, { customers, quotes, onOpen: setOpenCustomer, onAdd: () => setCustomerEditor({}) });
   } else if (view === 'access' && canManageAccess) {
     body = h(AccessView, { api, notify });
   }
@@ -573,6 +577,13 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       },
     }),
     h('datalist', { id: 'fd-customers' }, customers.map((c) => h('option', { key: c.id, value: c.name }, [c.country, c.deliveryTerms].filter(Boolean).join(' · ')))),
+    openCustomer && h(CustomerDrawer, {
+      customer: openCustomer,
+      quotes: quotes.filter((q) => normName(q.buyer) === normName(openCustomer.name)),
+      onClose: () => setOpenCustomer(null),
+      onEdit: () => { setOpenCustomer(null); setCustomerEditor({ customer: openCustomer }); },
+      onOpenQuote: (q) => { setOpenCustomer(null); setOpenQuote(q); },
+    }),
     openQuote && h(QuoteDrawer, { summary: openQuote, onClose: () => setOpenQuote(null), onLoad: () => openSavedQuote(openQuote.id), onDelete: () => deleteSavedQuote(openQuote) }),
     h('datalist', { id: 'fd-charge-names' }, [...new Set(rates.filter((r) => r.type === 'other').map((r) => String(r.chargeName || '').trim()).filter(Boolean))].sort().map((n) => h('option', { key: n, value: n }))),
     h('datalist', { id: 'fd-commodities' }, [...new Set([...COMMODITIES, ...rates.map((r) => r.commodity).filter(Boolean)])].map((c) => h('option', { key: c, value: c }))),
@@ -628,8 +639,8 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
   let customerHint = customers.length ? 'Pick from your customer list or type a name.' : 'Add customers under the Customers tab to pick them here.';
   if (known) customerHint = `From your customer list${known.country ? `, ${known.country}` : ''}.`;
   else if (String(quote.buyer || '').trim()) {
-    customerHint = h(React.Fragment, null, 'Not on your customer list. ',
-      h('button', { type: 'button', className: 'fdLinkButton', onClick: () => onAddCustomer?.({ name: quote.buyer }) }, 'Add it'));
+    customerHint = h(React.Fragment, null, 'New customer, added to your list when you save. ',
+      h('button', { type: 'button', className: 'fdLinkButton', onClick: () => onAddCustomer?.({ name: quote.buyer }) }, 'Add now'));
   }
 
   return h('div', { className: 'fdCalc' },
@@ -1085,6 +1096,34 @@ function CustomersView({ customers, quotes, onOpen, onAdd }) {
         ? h(Empty, { label: 'No customers match that search.' })
         : h('div', { className: 'emptyState' }, h(Users, { size: 22 }), h('span', null, 'No customers yet. Add the companies you quote to, then pick them on a quote.'),
           h(Button, { kind: 'primary', icon: Plus, onClick: onAdd }, 'Add customer')));
+}
+
+/** A customer's details and the saved quotes made out to them. */
+function CustomerDrawer({ customer: c, quotes, onClose, onEdit, onOpenQuote }) {
+  const details = [['Contact person', c.contact], ['Email', c.email], ['Phone', c.phone], ['Country', c.country], ['Usual delivery terms', c.deliveryTerms]]
+    .filter(([, v]) => String(v || '').trim());
+  return h(Overlay, { onClose },
+    h('aside', { className: 'drawer' },
+      h(PanelHead, { kicker: 'Customer', title: c.name, onClose }),
+      h('div', { className: 'drawerBody' },
+        details.length
+          ? h('div', { className: 'detailGrid' }, details.map(([k, v]) => h('div', { key: k }, h('small', null, k), h('strong', null, v))))
+          : h('p', { className: 'fdHolds' }, 'No contact details yet.'),
+        c.notes && h('div', { className: 'detailBlock' }, h('small', null, 'Notes'), h('p', null, c.notes)),
+        h('div', { className: 'fdDrawerActions' }, h(Button, { icon: PencilLine, onClick: onEdit }, 'Edit details')),
+        h('div', { className: 'detailBlock fdCustomerQuotes' },
+          h('small', null, `Saved quotes (${quotes.length})`),
+          quotes.length
+            ? h('div', { className: 'fdHistory' }, quotes.map((q) => {
+              const f = finalOf(q);
+              const what = [q.commodity, q.grade, q.quantity_t > 0 ? tonnes(q.quantity_t) : ''].filter(Boolean).join(', ');
+              return h('button', { key: q.id, type: 'button', className: 'fdQuoteRow', onClick: () => onOpenQuote(q) },
+                h('span', null, h('b', null, q.reference || 'No reference'), h('small', null, [formatDate(q.quoteDate), what].filter(Boolean).join('. '))),
+                h('span', { className: 'fdHistoryEnd' },
+                  f ? h('b', null, money(f.perTonne)) : h('b', null, money(q.landedPerTonneCAD)),
+                  h('small', null, f ? 'Final per MT' : 'Landed per MT')));
+            }))
+            : h('p', { className: 'fdHolds' }, 'No saved quotes for this customer yet.')))));
 }
 
 const CUSTOMER_FIELDS = ['name', 'contact', 'email', 'phone', 'country', 'deliveryTerms', 'notes'];

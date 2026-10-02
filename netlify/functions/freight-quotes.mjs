@@ -6,6 +6,7 @@
 // DELETE /api/freight/quotes/:id    delete a quote
 // Each workspace has its own saved quotes (see workspaceOf in netlify/lib/http.mjs):
 // portal staff, each client company, or an older link.
+// Saving a quote for a customer not on the workspace's customer list adds them.
 import { BASES, CURRENCIES, RATE_TYPES, computeQuote } from "../../freight/calc.js";
 import {
   assertSameOrigin,
@@ -21,6 +22,7 @@ import {
   route,
   updateJsonDoc,
 } from "../lib/http.mjs";
+import { addCustomerIfNew } from "../lib/customers.mjs";
 
 const INDEX = "index.json";
 const EMPTY_INDEX = { version: 1, quotes: [] };
@@ -141,7 +143,14 @@ export default route(async (req, context) => {
       index.quotes = [summary(quote), ...index.quotes.filter((q) => q.id !== quote.id)];
       return { doc: index, value: null };
     });
-    return json({ quote }, 201);
+    // The quote is saved either way; the customer list is a convenience.
+    let customerAdded = null;
+    try {
+      customerAdded = await addCustomerIfNew(ws, { name: inputs.buyer, deliveryTerms: inputs.destination }, session);
+    } catch (err) {
+      console.error("Saved the quote but could not add its customer to the list:", err);
+    }
+    return json({ quote, customerAdded }, 201);
   }
 
   if (req.method === "DELETE" && id) {

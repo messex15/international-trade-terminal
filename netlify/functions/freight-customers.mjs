@@ -5,6 +5,7 @@
 // POST   /api/freight/customers        add { name, contact, email, phone, country, deliveryTerms, notes }
 // PUT    /api/freight/customers/:id    update
 // DELETE /api/freight/customers/:id    remove (saved quotes keep the name they were saved with)
+// Saving a quote for a customer not on the list adds them (see freight-quotes.mjs).
 import {
   assertSameOrigin,
   cleanText,
@@ -12,15 +13,12 @@ import {
   HttpError,
   json,
   newId,
-  normName,
   readJson,
   requireWorkspace,
   route,
   updateJsonDoc,
 } from "../lib/http.mjs";
-
-const EMPTY = { version: 1, customers: [] };
-const MAX_CUSTOMERS = 2000;
+import { assertUniqueName, customerListKey as listKey, EMPTY_CUSTOMERS as EMPTY, MAX_CUSTOMERS } from "../lib/customers.mjs";
 
 const byName = (a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" });
 
@@ -38,15 +36,6 @@ function cleanCustomer(body) {
     deliveryTerms: cleanText(body.deliveryTerms, 80),
     notes: cleanText(body.notes, 1000),
   };
-}
-
-/** Staff: customers.json. Client workspaces: company/<id>.json or link/<id>.json. */
-const listKey = (ws) => (ws.prefix ? `${ws.prefix.slice(0, -1)}.json` : "customers.json");
-
-function assertUniqueName(customers, name, exceptId = null) {
-  if (customers.some((c) => c.id !== exceptId && normName(c.name) === normName(name))) {
-    throw new HttpError(409, `${name} is already on the customer list.`);
-  }
 }
 
 export default route(async (req, context) => {

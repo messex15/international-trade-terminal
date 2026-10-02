@@ -268,6 +268,35 @@ await step("the summary currency is kept with the quote", async () => {
   for (const q of [saved, other]) assert.equal((await req(`/api/freight/quotes/${q.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
 });
 
+await step("saving a quote for a new customer adds them to that workspace's customer list", async () => {
+  const name = `Nusantara Foods ${RUN}`;
+  const body = { buyer: name, destination: "CFR Surabaya", quantity_t: 100, quoteDate: "2026-10-02", purchasePrice: 500, purchaseCurrency: "CAD", lines: [] };
+  const first = await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body });
+  assert.equal(first.status, 201, await first.clone().text());
+  const { quote, customerAdded } = await first.json();
+  assert.equal(customerAdded?.name, name);
+  assert.equal(customerAdded.deliveryTerms, "CFR Surabaya", "the quote's delivery terms become their usual terms");
+  const again = await (await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body: { ...body, buyer: `  ${name.toUpperCase()} ` } })).json();
+  assert.equal(again.customerAdded, null, "a name already on the list, in any case or spacing, is not added again");
+  const listOf = async (cookie, q = "") => (await (await req(`/api/freight/customers${q}`, { cookie })).json()).customers;
+  const added = (await listOf(MEMBER)).filter((c) => c.name === name);
+  assert.equal(added.length, 1);
+  const noName = await (await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body: { ...body, buyer: "" } })).json();
+  assert.equal(noName.customerAdded, null, "a quote with no customer adds nothing");
+
+  // A client's quote adds to its company's list, not the staff list.
+  const lee = await clientSession("Lee", `Harbour Co ${RUN}`);
+  const clientName = `Client Buyer ${RUN}`;
+  const clientSave = await (await req("/api/freight/quotes?view=client", { method: "POST", cookie: lee.cookie, body: { ...body, buyer: clientName } })).json();
+  assert.equal(clientSave.customerAdded?.name, clientName);
+  assert.ok((await listOf(lee.cookie, "?view=client")).some((c) => c.name === clientName));
+  assert.ok(!(await listOf(MEMBER)).some((c) => c.name === clientName), "the staff list is untouched");
+
+  for (const q of [quote, again.quote, noName.quote]) assert.equal((await req(`/api/freight/quotes/${q.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+  assert.equal((await req(`/api/freight/quotes/${clientSave.quote.id}?view=client`, { method: "DELETE", cookie: lee.cookie })).status, 200);
+  assert.equal((await req(`/api/freight/customers/${added[0].id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+});
+
 await step("customer lists: staff have one, each client company has its own", async () => {
   const name = `Zeta Foods ${RUN}`;
   const add = await req("/api/freight/customers", { method: "POST", cookie: MEMBER, body: { name, country: "Indonesia", deliveryTerms: "CFR Jakarta", email: "buyer@zeta.example" } });
