@@ -32,6 +32,7 @@ export function route(fn) {
 export const accessStore = () => getStore({ name: "freight-access", consistency: "strong" });
 export const rateStore = () => getStore({ name: "freight-rates", consistency: "strong" });
 export const quoteStore = () => getStore({ name: "freight-quotes", consistency: "strong" });
+export const customerStore = () => getStore({ name: "freight-customers", consistency: "strong" });
 
 export function getCookie(req, name) {
   const header = req.headers.get("cookie") || "";

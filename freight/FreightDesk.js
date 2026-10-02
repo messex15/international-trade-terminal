@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Archive, ArchiveRestore, Calculator, Check, Copy, Download, Filter, History, KeyRound,
-  Link2, PackageSearch, PencilLine, Plus, Printer, RefreshCw, Search, Ship, Trash2, TriangleAlert, X,
+  Link2, PackageSearch, PencilLine, Plus, Printer, RefreshCw, Search, Ship, Trash2, TriangleAlert, Users, X,
 } from 'lucide-react';
 import {
   BASES, RATE_TYPES, compareRatesNewestFirst, computeQuote, daysBetween, formatDate,
@@ -131,6 +131,18 @@ function lineFromRate(r) {
 function oneOffLine() {
   return { rateId: null, type: 'other', provider: '', description: '', basis: 'per_tonne', amount: '', currency: 'CAD', capacity_t: '' };
 }
+const normName = (name) => String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const sortCustomers = (list) => [...list].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+
+/** Final price and estimated earnings from a saved quote summary (older summaries included). */
+function finalOf(q) {
+  const entered = q.salePerTonneCAD !== null && q.salePerTonneCAD !== undefined;
+  const perTonne = entered ? q.salePerTonneCAD : q.targetPricePerTonneCAD;
+  if (!(perTonne > 0) || q.landedPerTonneCAD === null || q.landedPerTonneCAD === undefined) return null;
+  const earningsPerTonne = perTonne - q.landedPerTonneCAD;
+  return { entered, perTonne, marginPct: (earningsPerTonne / perTonne) * 100, earnings: q.quantity_t > 0 ? earningsPerTonne * q.quantity_t : null };
+}
+
 function newerRateFor(line, rates) {
   if (!line.rateId) return null;
   const key = laneKey(line);
@@ -213,12 +225,14 @@ const TABS = [
   ['quote', 'Landed cost', Calculator],
   ['rates', 'Rate memory', Ship],
   ['quotes', 'Saved quotes', History],
+  ['customers', 'Customers', Users],
   ['access', 'Client access', KeyRound],
 ];
 const SUBTITLES = {
   quote: 'Price a shipment from real freight costs. Flags expired, old or replaced rates before a quote goes out.',
   rates: 'Every rail tariff, loading charge and carrier offer, captured as it arrives and kept with its history.',
   quotes: 'Each saved quote keeps a copy of the rates it was built on, so later changes are easy to spot.',
+  customers: 'Your customers and their usual delivery terms, ready to pick on a quote. Shared with everyone who uses the Freight Desk.',
   access: 'Give a client single-use access to the Freight Desk without a portal account.',
 };
 
@@ -237,6 +251,8 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   const [openQuote, setOpenQuote] = useState(null);
   const [saving, setSaving] = useState(false);
   const [printJob, setPrintJob] = useState(null);
+  const [customers, setCustomers] = useState([]);
+  const [customerEditor, setCustomerEditor] = useState(null);
 
   const notify = useCallback((text, bad = false) => setToast({ text, bad, at: Date.now() }), []);
   useEffect(() => {
@@ -253,11 +269,16 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     try {
       // The client page (/freight/) asks for the client's view of the session, so
       // a client link always wins there, even in a browser also signed in to the portal.
-      const [s, r, q] = await Promise.all([api(variant === 'standalone' ? 'session?view=client' : 'session'), api('rates'), api('quotes')]);
+      const [s, r, q, c] = await Promise.all([
+        api(variant === 'standalone' ? 'session?view=client' : 'session'), api('rates'), api('quotes'),
+        // The desk still works if the customer list cannot load; it is just empty.
+        api('customers').catch(() => ({ customers: [] })),
+      ]);
       setSession(s);
       onSession?.(s);
       setRates(r.rates);
       setQuotes(q.quotes);
+      setCustomers(c.customers || []);
       setState({ status: 'ready', error: '' });
     } catch (err) {
       setState({ status: 'error', error: err.message });
@@ -291,6 +312,16 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       notify(err.message, true);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function addCustomer(fields) {
+    try {
+      const { customer } = await api('customers', { method: 'POST', body: fields });
+      setCustomers((all) => sortCustomers([...all, customer]));
+      notify(`${customer.name} added to your customers. Add their details under Customers.`);
+    } catch (err) {
+      notify(err.message, true);
     }
   }
 
@@ -397,10 +428,11 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       h(Button, { key: 'cap', kind: 'primary', icon: Plus, onClick: () => setRateEditor({}) }, 'Capture rate'),
     ],
     quotes: [h(Button, { key: 'ref', icon: RefreshCw, onClick: () => api('quotes').then((d) => setQuotes(d.quotes)).catch((e) => notify(e.message, true)) }, 'Refresh')],
+    customers: [h(Button, { key: 'add', kind: 'primary', icon: Plus, onClick: () => setCustomerEditor({}) }, 'Add customer')],
     access: [],
   }[view];
 
-  const counts = { rates: activeLanes.length, quotes: quotes.length };
+  const counts = { rates: activeLanes.length, quotes: quotes.length, customers: customers.length };
   const tabs = TABS.filter(([id]) => id !== 'access' || canManageAccess);
 
   let body;
@@ -409,11 +441,13 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     body = h('div', { className: 'notice' }, h(TriangleAlert, { size: 18 }),
       h('span', null, state.error, ' ', h('button', { type: 'button', className: 'fdLinkButton', onClick: () => { setState({ status: 'loading', error: '' }); load(); } }, 'Try again')));
   } else if (view === 'quote') {
-    body = h(QuoteView, { quote, setQuote, result, onPick: () => setPicker(true), onSave: saveQuote, saving, api, notify, rates });
+    body = h(QuoteView, { quote, setQuote, result, onPick: () => setPicker(true), onSave: saveQuote, saving, api, notify, rates, customers, onAddCustomer: addCustomer });
   } else if (view === 'rates') {
     body = h(RatesView, { lanes, onOpen: setOpenLane, onCapture: () => setRateEditor({}) });
   } else if (view === 'quotes') {
     body = h(QuotesView, { quotes, onOpen: setOpenQuote });
+  } else if (view === 'customers') {
+    body = h(CustomersView, { customers, quotes, onOpen: (c) => setCustomerEditor({ customer: c }), onAdd: () => setCustomerEditor({}) });
   } else if (view === 'access' && canManageAccess) {
     body = h(AccessView, { api, notify });
   }
@@ -447,6 +481,18 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       onArchive: setArchived,
     }),
     picker && h(RatePicker, { lanes: activeLanes, quote, onAdd: (r) => addLine(lineFromRate(r)), onClose: () => setPicker(false) }),
+    customerEditor && h(CustomerEditor, {
+      initial: customerEditor.customer, api, onClose: () => setCustomerEditor(null),
+      onSaved: (saved, isNew) => {
+        setCustomers((all) => sortCustomers(isNew ? [...all, saved] : all.map((c) => (c.id === saved.id ? saved : c))));
+        notify(isNew ? `${saved.name} added to your customers.` : `${saved.name} updated.`);
+      },
+      onDeleted: (gone) => {
+        setCustomers((all) => all.filter((c) => c.id !== gone.id));
+        notify(`${gone.name} removed from your customers. Saved quotes keep the name.`);
+      },
+    }),
+    h('datalist', { id: 'fd-customers' }, customers.map((c) => h('option', { key: c.id, value: c.name }, [c.country, c.deliveryTerms].filter(Boolean).join(' · ')))),
     openQuote && h(QuoteDrawer, { summary: openQuote, onClose: () => setOpenQuote(null), onLoad: () => openSavedQuote(openQuote.id), onDelete: () => deleteSavedQuote(openQuote) }),
     h('datalist', { id: 'fd-commodities' }, [...new Set([...COMMODITIES, ...rates.map((r) => r.commodity).filter(Boolean)])].map((c) => h('option', { key: c, value: c }))),
     toast && h('div', { className: `toast${toast.bad ? ' fdToastBad' : ''}`, role: 'status', key: toast.at }, toast.text));
@@ -454,7 +500,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
 
 // ------------------------------------------------------------------ landed cost
 
-function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notify, rates }) {
+function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notify, rates, customers = [], onAddCustomer }) {
   const set = (key) => (e) => setQuote((q) => ({ ...q, [key]: e.target.value, ...(key === 'usdcad' ? { usdcadDate: '' } : {}) }));
   const setLine = (i, key) => (e) => setQuote((q) => ({ ...q, lines: q.lines.map((l, j) => (j === i ? { ...l, [key]: e.target.value } : l)) }));
   const removeLine = (i) => setQuote((q) => ({ ...q, lines: q.lines.filter((_, j) => j !== i) }));
@@ -477,6 +523,27 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
   const num = (key, props = {}) => input(key, { type: 'number', inputMode: 'decimal', min: 0, step: 'any', ...props });
   const currency = (key, label) => h('select', { value: quote[key], onChange: set(key), 'aria-label': label }, h('option', null, 'CAD'), h('option', null, 'USD'));
 
+  // Picking a customer from the list also fills their usual delivery terms when
+  // the quote has none, or still has the terms of the customer picked before
+  // (terms typed by hand are never replaced).
+  const known = customers.find((c) => normName(c.name) === normName(quote.buyer));
+  const pickCustomer = (e) => {
+    const value = e.target.value;
+    setQuote((q) => {
+      const match = customers.find((c) => normName(c.name) === normName(value));
+      const previous = customers.find((c) => normName(c.name) === normName(q.buyer));
+      const terms = String(q.destination || '').trim();
+      const replaceTerms = match?.deliveryTerms && (!terms || (previous?.deliveryTerms && normName(terms) === normName(previous.deliveryTerms)));
+      return { ...q, buyer: value, ...(replaceTerms ? { destination: match.deliveryTerms } : {}) };
+    });
+  };
+  let customerHint = customers.length ? 'Pick from your customer list or type a name.' : 'Add customers under the Customers tab to pick them here.';
+  if (known) customerHint = `From your customer list${known.country ? `, ${known.country}` : ''}.`;
+  else if (String(quote.buyer || '').trim()) {
+    customerHint = h(React.Fragment, null, 'Not on your customer list. ',
+      h('button', { type: 'button', className: 'fdLinkButton', onClick: () => onAddCustomer?.({ name: quote.buyer }) }, 'Add it'));
+  }
+
   return h('div', { className: 'fdCalc' },
     h('div', { className: 'fdCalcMain' },
       h('section', { className: 'card' },
@@ -485,7 +552,8 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
           h(Field, { label: 'Your company name', hint: 'Printed at the top of the PDF.', className: 'fdNoPrint' },
             input('companyName', { maxLength: 100, placeholder: DEFAULT_COMPANY })),
           h(Field, { label: 'Quote reference' }, input('reference', { maxLength: 60, placeholder: 'Q-2026-041' })),
-          h(Field, { label: 'Customer' }, input('buyer', { maxLength: 100 })),
+          h(Field, { label: 'Customer', hint: h('span', { className: 'fdNoPrint' }, customerHint) },
+            input('buyer', { maxLength: 100, list: 'fd-customers', onChange: pickCustomer, autoComplete: 'off' })),
           h(Field, { label: 'Commodity' }, input('commodity', { maxLength: 60, list: 'fd-commodities' })),
           h(Field, { label: 'Grade' }, input('grade', { maxLength: 60, placeholder: 'No. 2 or better' })),
           h(Field, { label: 'Quantity (tonnes)' }, num('quantity_t')),
@@ -499,8 +567,8 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
           h(Field, { label: 'USD to CAD rate', hint: quote.usdcadDate ? `Bank of Canada rate for ${formatDate(quote.usdcadDate)}.` : 'CAD for one US dollar.' },
             h('span', { className: 'fdCombo' }, num('usdcad', { placeholder: '1.3850' }),
               h('button', { type: 'button', className: 'secondary', onClick: fetchFx, disabled: fxBusy, title: 'Use the latest Bank of Canada daily rate' }, fxBusy ? '…' : 'BoC rate'))),
-          h(Field, { label: 'Price you plan to offer', hint: 'Per tonne. Optional; checked against your margins.' },
-            h('span', { className: 'fdCombo' }, num('salePrice', { placeholder: 'Optional' }), currency('saleCurrency', 'Offer currency'))),
+          h(Field, { label: 'Final price per tonne', hint: 'Optional. Leave blank to use the lowest price at your target margin.' },
+            h('span', { className: 'fdCombo' }, num('salePrice', { placeholder: 'Optional' }), currency('saleCurrency', 'Final price currency'))),
           h(Field, { label: 'Target margin (%)' }, num('targetMarginPct', { max: 99.9 })),
           h(Field, { label: 'Margin floor (%)', hint: 'Never quote below this.' }, num('minMarginPct', { max: 99.9 })))),
       h('section', { className: 'card dataCard fdChargesCard' },
@@ -573,6 +641,25 @@ function Row({ label, value, total }) {
   return h('div', { className: `fdRow${total ? ' total' : ''}` }, h('span', null, label), h('b', null, value));
 }
 
+/** The price going to the customer and what the deal is expected to earn. */
+function FinalBlock({ quote, result: r }) {
+  const f = r.final;
+  const inUSD = quote.saleCurrency === 'USD';
+  let perTonne = money(f.perTonneCAD);
+  if (f.source === 'entered') perTonne = `${money(Number(quote.salePrice), quote.saleCurrency)}${inUSD ? ` (${money(f.perTonneCAD)})` : ''}`;
+  else if (inUSD && f.perTonneUSD !== null) perTonne = `${money(f.perTonneUSD, 'USD')} (${money(f.perTonneCAD)})`;
+  const whole = inUSD && f.totalUSD !== null ? `${money(f.totalUSD, 'USD', 0)} (${money(f.totalCAD, 'CAD', 0)})` : money(f.totalCAD, 'CAD', 0);
+  return h('div', { className: 'fdFinal' },
+    h('div', { className: 'fdRows' },
+      h(Row, { label: 'Final price per tonne', value: perTonne }),
+      h(Row, { label: 'Final price, whole shipment', value: whole }),
+      h(Row, { label: 'Margin', value: pct(f.marginPct) }),
+      h(Row, { label: 'Estimated earnings per tonne', value: money(f.earningsPerTonneCAD) }),
+      h(Row, { label: 'Estimated earnings', value: money(f.earningsTotalCAD, 'CAD', 0), total: true })),
+    f.source === 'target' && h('p', { className: 'fdHolds' },
+      `No final price entered, so this uses the lowest price at your ${pctSetting(r.targetMarginPct)} target margin.`));
+}
+
 function QuoteSummary({ quote, result: r, onSave, saving }) {
   const ready = r.landedPerTonneCAD !== null && r.quantity_t > 0;
   const issues = r.issues.filter((i) => i.code !== 'margin');
@@ -602,12 +689,8 @@ function QuoteSummary({ quote, result: r, onSave, saving }) {
           h('strong', null, money(r.targetPricePerTonneCAD), h('span', null, ' /t')),
           r.targetPricePerTonneUSD !== null && h('em', null, `${money(r.targetPricePerTonneUSD, 'USD')} per tonne at ${r.usdcad}`)),
         h('div', { className: 'fdRows' },
-          h(Row, { label: `Floor at ${pctSetting(r.minMarginPct)} margin`, value: `${money(r.floorPricePerTonneCAD)}${r.floorPricePerTonneUSD !== null ? ` (${money(r.floorPricePerTonneUSD, 'USD')})` : ''}` }),
-          r.sale && h(React.Fragment, null,
-            h(Row, { label: 'Offered price', value: `${money(Number(quote.salePrice), quote.saleCurrency)}${quote.saleCurrency === 'USD' ? ` (${money(r.sale.perTonneCAD)})` : ''}` }),
-            h(Row, { label: 'Margin', value: pct(r.sale.marginPct) }),
-            h(Row, { label: 'Profit per tonne', value: money(r.sale.profitPerTonneCAD) }),
-            h(Row, { label: 'Profit on shipment', value: money(r.sale.profitTotalCAD, 'CAD', 0), total: true }))),
+          h(Row, { label: `Floor at ${pctSetting(r.minMarginPct)} margin`, value: `${money(r.floorPricePerTonneCAD)}${r.floorPricePerTonneUSD !== null ? ` (${money(r.floorPricePerTonneUSD, 'USD')})` : ''}` })),
+        r.final && h(FinalBlock, { quote, result: r }),
         verdict && h('div', { className: `fdVerdict ${verdict[0]}` }, verdict[1]),
         h('p', { className: 'fdHolds' }, r.validUntil
           ? h(React.Fragment, null, 'Holds until ', h('b', null, formatDate(r.validUntil)), ', when the first rate used expires.')
@@ -811,9 +894,11 @@ function RatePicker({ lanes, quote, onAdd, onClose }) {
 
 // ------------------------------------------------------------------ saved quotes
 
-function marginBadge(q) {
-  if (q.marginPct === null || q.marginPct === undefined) return null;
-  return h('span', { className: q.belowFloor ? 'badge bad' : 'badge good' }, `${pct(q.marginPct)}${q.belowFloor ? ', below floor' : ''}`);
+function marginBadge(q, f = finalOf(q)) {
+  if (!f) return null;
+  if (!f.entered) return h('span', { className: 'badge' }, `${pct(f.marginPct)} target`);
+  const bad = q.belowFloor || f.marginPct < 0;
+  return h('span', { className: bad ? 'badge bad' : 'badge good' }, `${pct(f.marginPct)}${q.belowFloor ? ', below floor' : ''}`);
 }
 
 function QuotesView({ quotes, onOpen }) {
@@ -827,21 +912,23 @@ function QuotesView({ quotes, onOpen }) {
     visible.length
       ? h('div', { className: 'tableWrap' },
         h('table', null,
-          h('thead', null, h('tr', null, ['Quote date', 'Reference', 'Customer', 'Commodity', 'Tonnes', 'Landed /t', 'Offered /t', 'Margin', 'Holds until'].map((c) => h('th', { key: c, className: ['Tonnes', 'Landed /t', 'Offered /t'].includes(c) ? 'fdNum' : undefined }, c)))),
-          h('tbody', null, visible.map((q) => h('tr', { key: q.id, tabIndex: 0, onClick: () => onOpen(q), onKeyDown: (e) => { if (e.key === 'Enter') onOpen(q); } },
+          h('thead', null, h('tr', null, ['Quote date', 'Reference', 'Customer', 'Commodity', 'Tonnes', 'Landed /t', 'Final /t', 'Margin', 'Est. earnings', 'Holds until'].map((c) => h('th', { key: c, className: ['Tonnes', 'Landed /t', 'Final /t', 'Est. earnings'].includes(c) ? 'fdNum' : undefined }, c)))),
+          h('tbody', null, visible.map((q) => { const f = finalOf(q); return h('tr', { key: q.id, tabIndex: 0, onClick: () => onOpen(q), onKeyDown: (e) => { if (e.key === 'Enter') onOpen(q); } },
             h('td', null, formatDate(q.quoteDate), h('small', null, `by ${q.createdBy}`)),
             h('td', null, h('b', null, q.reference || 'No reference')),
             h('td', null, q.buyer),
             h('td', null, q.commodity, q.grade && h('small', null, q.grade)),
             h('td', { className: 'fdNum' }, tonnes(q.quantity_t)),
             h('td', { className: 'fdNum' }, money(q.landedPerTonneCAD)),
-            h('td', { className: 'fdNum' }, money(q.salePerTonneCAD)),
-            h('td', null, marginBadge(q)),
-            h('td', null, q.validUntil && h(Validity, { validUntil: q.validUntil })))))))
+            h('td', { className: 'fdNum' }, f && money(f.perTonne), f && !f.entered && h('small', null, 'at target')),
+            h('td', null, marginBadge(q, f)),
+            h('td', { className: 'fdNum' }, f && money(f.earnings, 'CAD', 0)),
+            h('td', null, q.validUntil && h(Validity, { validUntil: q.validUntil }))); }))))
       : h(Empty, { label: quotes.length ? 'No saved quotes match that search.' : 'No saved quotes yet. Build one under Landed cost and press Save quote.' }));
 }
 
 function QuoteDrawer({ summary: q, onClose, onLoad, onDelete }) {
+  const f = finalOf(q);
   return h(Overlay, { onClose },
     h('aside', { className: 'drawer' },
       h(PanelHead, { kicker: 'Saved quote', title: q.reference || 'No reference', onClose }),
@@ -850,8 +937,9 @@ function QuoteDrawer({ summary: q, onClose, onLoad, onDelete }) {
         h('div', { className: 'detailGrid' },
           [['Customer', q.buyer || 'Not set'], ['Quote date', formatDate(q.quoteDate)], ['Quantity', tonnes(q.quantity_t)],
             ['Landed cost per tonne', money(q.landedPerTonneCAD)], ['Lowest price at target', money(q.targetPricePerTonneCAD)],
-            ['Offered per tonne', q.salePerTonneCAD === null ? 'Not set' : money(q.salePerTonneCAD)],
-            ['Margin', q.marginPct === null ? 'No offer entered' : `${pct(q.marginPct)}${q.belowFloor ? ', below floor' : ''}`],
+            ['Final price per tonne', f ? `${money(f.perTonne)}${f.entered ? '' : ' (at target)'}` : 'Not set'],
+            ['Margin', f ? `${pct(f.marginPct)}${f.entered && q.belowFloor ? ', below floor' : ''}` : 'Not set'],
+            ['Estimated earnings', f ? money(f.earnings, 'CAD', 0) : 'Not set'],
             ['Holds until', q.validUntil ? formatDate(q.validUntil) : 'No end date'], ['Saved by', q.createdBy]]
             .map(([k, v]) => h('div', { key: k }, h('small', null, k), h('strong', null, v)))),
         h('div', { className: 'notice' }, h(History, { size: 18 }),
@@ -859,6 +947,97 @@ function QuoteDrawer({ summary: q, onClose, onLoad, onDelete }) {
         h('div', { className: 'fdDrawerActions' },
           h(Button, { kind: 'primary', icon: Calculator, onClick: onLoad }, 'Open in Landed cost'),
           h(Button, { icon: Trash2, className: 'secondary fdDanger', onClick: onDelete }, 'Delete')))));
+}
+
+// ------------------------------------------------------------------ customers
+
+function CustomersView({ customers, quotes, onOpen, onAdd }) {
+  const [query, setQuery] = useState('');
+  const quoteCounts = useMemo(() => {
+    const counts = new Map();
+    for (const q of quotes) if (normName(q.buyer)) counts.set(normName(q.buyer), (counts.get(normName(q.buyer)) || 0) + 1);
+    return counts;
+  }, [quotes]);
+  const needle = query.trim().toLowerCase();
+  const visible = customers.filter((c) => !needle || [c.name, c.contact, c.email, c.phone, c.country, c.deliveryTerms].join(' ').toLowerCase().includes(needle));
+  return h('section', { className: 'card dataCard' },
+    h('div', { className: 'toolbar' },
+      h('div', { className: 'pageSearch' }, h(Search, { size: 15 }),
+        h('input', { 'aria-label': 'Search customers', placeholder: 'Search name, contact, country...', value: query, onChange: (e) => setQuery(e.target.value) })),
+      h('span', { className: 'recordCount' }, `${visible.length} customer${visible.length === 1 ? '' : 's'}`)),
+    visible.length
+      ? h('div', { className: 'tableWrap' },
+        h('table', null,
+          h('thead', null, h('tr', null, ['Customer', 'Country', 'Usual delivery terms', 'Email and phone', 'Saved quotes'].map((c) => h('th', { key: c, className: c === 'Saved quotes' ? 'fdNum' : undefined }, c)))),
+          h('tbody', null, visible.map((c) => h('tr', { key: c.id, tabIndex: 0, onClick: () => onOpen(c), onKeyDown: (e) => { if (e.key === 'Enter') onOpen(c); } },
+            h('td', null, h('b', null, c.name), c.contact && h('small', null, c.contact)),
+            h('td', null, c.country),
+            h('td', null, c.deliveryTerms),
+            h('td', null, c.email, c.phone && h('small', null, c.phone)),
+            h('td', { className: 'fdNum' }, quoteCounts.get(normName(c.name)) || ''))))))
+      : customers.length
+        ? h(Empty, { label: 'No customers match that search.' })
+        : h('div', { className: 'emptyState' }, h(Users, { size: 22 }), h('span', null, 'No customers yet. Add the companies you quote to, then pick them on a quote.'),
+          h(Button, { kind: 'primary', icon: Plus, onClick: onAdd }, 'Add customer')));
+}
+
+const CUSTOMER_FIELDS = ['name', 'contact', 'email', 'phone', 'country', 'deliveryTerms', 'notes'];
+
+function CustomerEditor({ initial, api, onClose, onSaved, onDeleted }) {
+  const editing = Boolean(initial?.id);
+  const [form, setForm] = useState(() => Object.fromEntries(CUSTOMER_FIELDS.map((k) => [k, initial?.[k] ?? ''])));
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) return setError("Enter the customer's name.");
+    setBusy(true);
+    setError('');
+    try {
+      const { customer } = editing
+        ? await api(`customers/${initial.id}`, { method: 'PUT', body: form })
+        : await api('customers', { method: 'POST', body: form });
+      onSaved(customer, !editing);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm(`Remove ${initial.name} from your customers? Saved quotes keep the name.`)) return;
+    setBusy(true);
+    try {
+      await api(`customers/${initial.id}`, { method: 'DELETE' });
+      onDeleted(initial);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  const input = (key, props = {}) => h('input', { value: form[key] ?? '', onChange: set(key), ...props });
+  return h(Overlay, { centered: true, onClose },
+    h('form', { className: 'modal fd', onSubmit: submit, noValidate: true },
+      h(PanelHead, { kicker: 'Customers', title: editing ? initial.name : 'Add a customer', onClose }),
+      h('div', { className: 'formGrid' },
+        h(Field, { label: 'Customer name' }, input('name', { maxLength: 100, required: true, autoFocus: true, placeholder: 'PT Sinar Pangan' })),
+        h(Field, { label: 'Contact person' }, input('contact', { maxLength: 100, placeholder: 'Budi Santoso' })),
+        h(Field, { label: 'Email' }, input('email', { type: 'email', maxLength: 120 })),
+        h(Field, { label: 'Phone' }, input('phone', { type: 'tel', maxLength: 40 })),
+        h(Field, { label: 'Country' }, input('country', { maxLength: 60, placeholder: 'Indonesia' })),
+        h(Field, { label: 'Usual delivery terms', hint: 'Filled in on a quote when you pick this customer.' }, input('deliveryTerms', { maxLength: 80, placeholder: 'CFR Jakarta' })),
+        h(Field, { label: 'Notes', className: 'fdSpan2' }, h('textarea', { value: form.notes, onChange: set('notes'), maxLength: 1000, rows: 3, placeholder: 'Preferred grades, payment terms, documents they need' }))),
+      h('div', { className: `modalNote${error ? ' fdError' : ''}`, role: error ? 'alert' : undefined },
+        error || 'Saved to the shared customer list. Everyone with Freight Desk access sees it.'),
+      h('div', { className: 'modalActions' },
+        editing && h(Button, { icon: Trash2, className: 'secondary fdDanger fdPushLeft', onClick: remove, disabled: busy }, 'Remove'),
+        h('button', { type: 'button', className: 'secondary', onClick: onClose }, 'Cancel'),
+        h('button', { type: 'submit', className: 'primary', disabled: busy }, h(Check, { size: 15 }), busy ? 'Saving…' : editing ? 'Save changes' : 'Add customer'))));
 }
 
 // ------------------------------------------------------------------ client access

@@ -305,6 +305,26 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
 
   const usd = (cad) => (cad === null || !(usdcad > 0) ? null : cad / usdcad);
 
+  // Final price: the price going to the customer. The price entered on the
+  // quote, or the lowest price at the target margin when none is entered.
+  // Estimated earnings: final price minus the full landed cost (commission on
+  // the sale price included, worked out at that same price).
+  let final = null;
+  const finalPerTonne = offeredPerTonne ?? targetPricePerTonne;
+  if (finalPerTonne !== null && finalPerTonne > 0 && landedPerTonne !== null) {
+    const earningsPerTonne = finalPerTonne - landedPerTonne;
+    final = {
+      source: offeredPerTonne !== null ? "entered" : "target",
+      perTonneCAD: finalPerTonne,
+      perTonneUSD: usd(finalPerTonne),
+      totalCAD: quantity > 0 ? finalPerTonne * quantity : null,
+      totalUSD: quantity > 0 ? usd(finalPerTonne * quantity) : null,
+      earningsPerTonneCAD: earningsPerTonne,
+      earningsTotalCAD: quantity > 0 ? earningsPerTonne * quantity : null,
+      marginPct: (earningsPerTonne / finalPerTonne) * 100,
+    };
+  }
+
   return {
     quoteDate,
     quantity_t: quantity,
@@ -323,6 +343,7 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
     floorPricePerTonneCAD: floorPricePerTonne,
     floorPricePerTonneUSD: usd(floorPricePerTonne),
     sale,
+    final,
     lines,
     validUntil,
     issues,

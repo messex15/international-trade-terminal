@@ -204,6 +204,26 @@ await step("grade, customer, standard rows and a commission on the sale price ar
   assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
 });
 
+await step("the customer list: add, refuse duplicates, update, list A to Z, remove", async () => {
+  const name = `Zeta Foods ${RUN}`;
+  const add = await req("/api/freight/customers", { method: "POST", cookie: MEMBER, body: { name, country: "Indonesia", deliveryTerms: "CFR Jakarta", email: "buyer@zeta.example" } });
+  assert.equal(add.status, 201, await add.clone().text());
+  const { customer } = await add.json();
+  assert.equal(customer.createdBy, "Ainu A.");
+  const dupe = await req("/api/freight/customers", { method: "POST", cookie: client.cookie, body: { name: `  ${name.toUpperCase()} ` } });
+  assert.equal(dupe.status, 409, "names are matched ignoring case and spacing");
+  assert.equal((await req("/api/freight/customers", { method: "POST", cookie: MEMBER, body: { name: "Bad email", email: "not-an-email" } })).status, 400);
+  const other = await (await req("/api/freight/customers", { method: "POST", cookie: client.cookie, body: { name: `Alpha Grains ${RUN}` } })).json();
+  const put = await req(`/api/freight/customers/${customer.id}`, { method: "PUT", cookie: MEMBER, body: { ...customer, deliveryTerms: "CIF Surabaya" } });
+  assert.equal((await put.json()).customer.deliveryTerms, "CIF Surabaya");
+  const { customers } = await (await req("/api/freight/customers", { cookie: client.cookie })).json();
+  const mine = customers.filter((c) => c.name.endsWith(RUN)).map((c) => c.name);
+  assert.deepEqual(mine, [`Alpha Grains ${RUN}`, name], "sorted A to Z");
+  assert.equal((await req("/api/freight/customers", { cookie: NOT_MEMBER })).status, 401);
+  for (const id of [customer.id, other.customer.id]) assert.equal((await req(`/api/freight/customers/${id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+  assert.equal((await req(`/api/freight/customers/${customer.id}`, { method: "DELETE", cookie: MEMBER })).status, 404);
+});
+
 await step("the member's link list shows the client link in use; revoking ends it", async () => {
   const { links } = await (await req("/api/freight/access-links", { cookie: MEMBER })).json();
   const mine = links.find((l) => l.id === client.linkId);

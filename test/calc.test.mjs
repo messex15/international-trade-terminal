@@ -174,3 +174,41 @@ test("target margin plus commission of 100% or more is an input error", () => {
   assert.equal(q.hasInputErrors, true);
   assert.equal(q.targetPricePerTonneCAD, null);
 });
+
+// ---------------------------------------------------------------- final price and estimated earnings
+
+test("final price is the entered price, and earnings are what is left after landed cost", () => {
+  const q = computeQuote(deal([loading, commissionPct(2)], { salePrice: 600, saleCurrency: "CAD" }));
+  assert.equal(q.final.source, "entered");
+  near(q.final.perTonneCAD, 600);
+  near(q.final.totalCAD, 60_000);
+  near(q.final.earningsPerTonneCAD, 600 - 532); // 532 = 500 goods + 20 loading + 2% of 600
+  near(q.final.earningsTotalCAD, 6_800);
+  near(q.final.marginPct, (68 / 600) * 100);
+});
+
+test("with no price entered, the final price is the lowest price at the target margin", () => {
+  const q = computeQuote(deal([loading, commissionPct(2)]));
+  assert.equal(q.final.source, "target");
+  near(q.final.perTonneCAD, 520 / 0.9);
+  near(q.final.marginPct, 8);
+  near(q.final.earningsTotalCAD, (520 / 0.9) * 0.08 * 100);
+});
+
+test("a USD final price also reports its USD value", () => {
+  const q = computeQuote(deal([loading], { salePrice: 420, saleCurrency: "USD", usdcad: 1.4 }));
+  near(q.final.perTonneCAD, 588);
+  near(q.final.perTonneUSD, 420);
+  near(q.final.totalUSD, 42_000);
+  near(q.final.earningsTotalCAD, (588 - 520) * 100);
+});
+
+test("a losing price shows negative earnings", () => {
+  const q = computeQuote(deal([loading], { salePrice: 500, saleCurrency: "CAD" }));
+  near(q.final.earningsTotalCAD, -2_000);
+  assert.ok(q.final.marginPct < 0);
+});
+
+test("no final price until there is a cost to price from", () => {
+  assert.equal(computeQuote(deal([loading], { purchasePrice: "" })).final, null);
+});

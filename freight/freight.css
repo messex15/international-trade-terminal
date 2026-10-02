@@ -76,6 +76,8 @@
 .fdVerdict.good{background:#eaf5ec;color:#397147;border-color:#cfe5d4}
 .fdVerdict.warn{background:#fff8e7;color:#715d2e;border-color:#eedaa6}
 .fdVerdict.bad{background:#fdeceb;color:#9f443c;border-color:#f3cbc7}
+.fdFinal{margin-top:6px;border-top:1px solid #dfe6ef}
+.fdPushLeft{margin-right:auto}
 .fdHolds{margin:10px 17px 0;font-size:10px;color:#66778a;line-height:1.5}
 .fdHolds b{color:#253b51}
 .fdIssues{list-style:none;margin:12px 17px 0;padding:10px 11px;background:#fff8e7;border:1px solid #eedaa6;border-radius:8px}

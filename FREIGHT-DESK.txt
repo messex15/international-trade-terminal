@@ -23,6 +23,15 @@ A rate memory and landed cost calculator for trading.
   and its cost per tonne is shown at the offered price, or at the target
   price when no offer is entered.
 - Deal details include the customer and the product grade.
+- Final price and estimated earnings: the final price is the price entered on
+  the quote, or the lowest price at the target margin when none is entered.
+  Estimated earnings = final price - landed cost (all charges, commission
+  included), for the whole shipment.
+- Customers: a shared list of the companies you quote to, with contact and
+  usual delivery terms. Pick one in the quote's Customer box; its delivery
+  terms fill in if the quote has none. A new name typed on a quote can be
+  added to the list from there. Everyone with Freight Desk access, client
+  links included, can see and edit the list.
 - Saved quotes: the server recomputes totals and keeps a copy of the rates
   used. Opening a saved quote re-checks it against today's rates.
 - Print / PDF: the top of the page shows "Your company name" from the quote
@@ -67,8 +76,8 @@ SETUP (once)
 3. Sign in to the portal as a member and open Freight Desk.
 
 WHERE THE DATA LIVES
-Netlify Blobs on this site: stores freight-access, freight-rates and
-freight-quotes. Browse them in Netlify under Data & Storage > Blobs. Writes
+Netlify Blobs on this site: stores freight-access, freight-rates,
+freight-quotes and freight-customers. Browse them in Netlify under Data & Storage > Blobs. Writes
 use version checks so two people saving at once never overwrite each other.
 Site-wide Blobs default to Netlify's us-east-2 (Ohio) region; Netlify has no
 Canadian region.
