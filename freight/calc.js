@@ -7,10 +7,12 @@ export const RATE_TYPES = {
   rail: "Rail freight",
   truck: "Truck or drayage",
   loading: "Loading and elevation",
+  transload: "Transloading",
   port: "Port and terminal",
   ocean: "Ocean freight",
   inspection: "Inspection and documents",
   insurance: "Insurance",
+  commission: "Commission",
   other: "Other charge",
 };
 
@@ -20,8 +22,22 @@ export const BASES = {
   per_container: { label: "per container", short: "/cntr", needsCapacity: true, unit: "container", plural: "containers" },
   per_truckload: { label: "per truckload", short: "/load", needsCapacity: true, unit: "truckload", plural: "truckloads" },
   per_shipment: { label: "per shipment (flat)", short: "/shipment", needsCapacity: false },
-  percent_of_value: { label: "% of goods value", short: "% of value", needsCapacity: false },
+  percent_of_value: { label: "% of goods value", short: "% of value", needsCapacity: false, percent: true },
+  // Charged on the sale price (typically commission). The target and floor
+  // prices are solved so the charge is covered: price = cost / (1 - margin - %).
+  percent_of_sale: { label: "% of sale price", short: "% of sale", needsCapacity: false, percent: true },
 };
+
+const isBlank = (value) => value === "" || value === null || value === undefined;
+
+/**
+ * Every quote starts with a few standard rows (transloading, ocean freight,
+ * insurance, commission). A standard row left without an amount is not part
+ * of the quote: no cost, no warnings, not printed.
+ */
+export function isUnusedLine(line) {
+  return Boolean(line?.standard) && isBlank(line.amount);
+}
 
 export const CURRENCIES = ["CAD", "USD"];
 
@@ -107,12 +123,18 @@ export function toCAD(amount, currency, usdcad) {
  * Per-unit charges (railcar, container, truckload) are billed per whole unit,
  * so a partial car costs a full car: units = ceil(quantity / capacity).
  */
-export function lineCost(line, { usdcad, quantity_t, goodsPerTonneCAD }) {
+export function lineCost(line, { usdcad, quantity_t, goodsPerTonneCAD, salePerTonneCAD = null }) {
   const basis = BASES[line.basis];
   if (!basis) return { error: "Choose how this charge is billed." };
   const amount = Number(line.amount);
-  if (line.amount === "" || line.amount === null || !Number.isFinite(amount) || amount < 0) {
+  if (isBlank(line.amount) || !Number.isFinite(amount) || amount < 0) {
     return { error: "Enter an amount." };
+  }
+
+  if (line.basis === "percent_of_sale") {
+    // Depends on the sale price, which computeQuote works out first.
+    if (salePerTonneCAD === null) return { salePct: amount };
+    return { salePct: amount, perTonne: (salePerTonneCAD * amount) / 100 };
   }
 
   if (line.basis === "percent_of_value") {
@@ -183,7 +205,7 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
   const usesUSD =
     q.purchaseCurrency === "USD" ||
     q.saleCurrency === "USD" ||
-    (q.lines || []).some((l) => l.currency === "USD" && l.basis !== "percent_of_value");
+    (q.lines || []).some((l) => l.currency === "USD" && !BASES[l.basis]?.percent && !isUnusedLine(l));
 
   if (!(quantity > 0)) issues.push({ level: "error", code: "input", message: "Enter the quantity in tonnes." });
   if (purchase === null || purchase < 0) issues.push({ level: "error", code: "input", message: "Enter the purchase price per tonne." });
@@ -193,8 +215,40 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
 
   const goodsPerTonne = purchase === null || purchase < 0 ? null : toCAD(purchase, q.purchaseCurrency, usdcad);
 
-  const lines = (q.lines || []).map((line) => {
-    const cost = lineCost(line, { usdcad, quantity_t: quantity, goodsPerTonneCAD: goodsPerTonne });
+  // Pass 1: every charge that does not depend on the sale price.
+  const costs = (q.lines || []).map((line) =>
+    isUnusedLine(line) ? { unused: true } : lineCost(line, { usdcad, quantity_t: quantity, goodsPerTonneCAD: goodsPerTonne }));
+  const fixedPerTonne = costs.reduce((sum, c) => sum + (c.salePct === undefined ? c.perTonne ?? 0 : 0), 0);
+  const salePct = costs.reduce((sum, c) => sum + (c.salePct ?? 0), 0);
+  const baseLanded = goodsPerTonne === null ? null : goodsPerTonne + fixedPerTonne;
+
+  // Price for a gross margin m with s% of the sale price going to commission:
+  // price - (cost + s * price) = m * price, so price = cost / (1 - m - s).
+  if (salePct > 0 && targetMargin + salePct >= 100) {
+    issues.push({ level: "error", code: "input", message: "Target margin plus commission must be under 100% of the sale price." });
+  }
+  const priceAt = (margin) =>
+    baseLanded === null || margin < 0 || margin + salePct >= 100 ? null : baseLanded / (1 - (margin + salePct) / 100);
+  const targetPricePerTonne = priceAt(targetMargin);
+  const floorPricePerTonne = priceAt(floorMargin);
+
+  const offered = num(q.salePrice);
+  const offeredPerTonne = offered !== null && offered > 0 ? toCAD(offered, q.saleCurrency, usdcad) : null;
+  // Charges on the sale price are shown at the offered price, or at the target
+  // price when no offer is entered.
+  const saleBasedAt = offeredPerTonne !== null ? "offered" : targetPricePerTonne !== null ? "target" : null;
+  const referencePrice = offeredPerTonne ?? targetPricePerTonne;
+
+  const lines = (q.lines || []).map((line, i) => {
+    let cost = costs[i];
+    if (cost.unused) {
+      return { ...line, unused: true, perTonneCAD: null, totalCAD: null, units: null, unitLabel: null, flags: [] };
+    }
+    if (cost.salePct !== undefined) {
+      cost = referencePrice === null
+        ? { error: "Needs a purchase price first." }
+        : { perTonne: (referencePrice * cost.salePct) / 100, atPrice: saleBasedAt };
+    }
     const flags = rateFlags(line, quoteDate, staleDays);
     if (cost.error) flags.push({ level: "error", code: "input", message: cost.error });
     const perTonne = cost.perTonne ?? null;
@@ -204,6 +258,7 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
       totalCAD: perTonne !== null && quantity > 0 ? perTonne * quantity : null,
       units: cost.units ?? null,
       unitLabel: cost.unitLabel ?? null,
+      atPrice: cost.atPrice ?? null,
       flags,
     };
   });
@@ -212,36 +267,28 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
   const landedPerTonne = goodsPerTonne === null ? null : goodsPerTonne + chargesPerTonne;
   const landedTotal = landedPerTonne !== null && quantity > 0 ? landedPerTonne * quantity : null;
 
-  const priceAt = (margin) =>
-    landedPerTonne === null || margin < 0 || margin >= 100 ? null : landedPerTonne / (1 - margin / 100);
-  const targetPricePerTonne = priceAt(targetMargin);
-  const floorPricePerTonne = priceAt(floorMargin);
-
   let sale = null;
-  const offered = num(q.salePrice);
-  if (offered !== null && offered > 0 && landedPerTonne !== null) {
-    const salePerTonne = toCAD(offered, q.saleCurrency, usdcad);
-    if (salePerTonne !== null) {
-      const profitPerTonne = salePerTonne - landedPerTonne;
-      const marginPct = (profitPerTonne / salePerTonne) * 100;
-      sale = {
-        perTonneCAD: salePerTonne,
-        profitPerTonneCAD: profitPerTonne,
-        profitTotalCAD: quantity > 0 ? profitPerTonne * quantity : null,
-        revenueTotalCAD: quantity > 0 ? salePerTonne * quantity : null,
-        marginPct,
-        belowFloor: marginPct < floorMargin,
-        belowTarget: marginPct < targetMargin,
-      };
-      if (profitPerTonne < 0) {
-        issues.push({ level: "error", code: "margin", message: "The offered price is below landed cost. This deal loses money." });
-      } else if (sale.belowFloor) {
-        issues.push({
-          level: "error",
-          code: "margin",
-          message: `The offered price leaves a ${marginPct.toFixed(1)}% margin, below the ${floorMargin}% floor.`,
-        });
-      }
+  if (offeredPerTonne !== null && landedPerTonne !== null) {
+    const salePerTonne = offeredPerTonne;
+    const profitPerTonne = salePerTonne - landedPerTonne;
+    const marginPct = (profitPerTonne / salePerTonne) * 100;
+    sale = {
+      perTonneCAD: salePerTonne,
+      profitPerTonneCAD: profitPerTonne,
+      profitTotalCAD: quantity > 0 ? profitPerTonne * quantity : null,
+      revenueTotalCAD: quantity > 0 ? salePerTonne * quantity : null,
+      marginPct,
+      belowFloor: marginPct < floorMargin,
+      belowTarget: marginPct < targetMargin,
+    };
+    if (profitPerTonne < 0) {
+      issues.push({ level: "error", code: "margin", message: "The offered price is below landed cost. This deal loses money." });
+    } else if (sale.belowFloor) {
+      issues.push({
+        level: "error",
+        code: "margin",
+        message: `The offered price leaves a ${marginPct.toFixed(1)}% margin, below the ${floorMargin}% floor.`,
+      });
     }
   }
 
@@ -267,6 +314,8 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
     landedPerTonneCAD: landedPerTonne,
     landedPerTonneUSD: usd(landedPerTonne),
     landedTotalCAD: landedTotal,
+    saleBasedPct: salePct,
+    saleBasedAt: salePct > 0 ? saleBasedAt : null,
     targetMarginPct: targetMargin,
     minMarginPct: floorMargin,
     targetPricePerTonneCAD: targetPricePerTonne,

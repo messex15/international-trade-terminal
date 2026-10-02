@@ -33,6 +33,9 @@ function cleanLine(line, i) {
   if (!BASES[line.basis]) throw new HttpError(400, `${at}: choose how it is billed.`);
   return {
     rateId: cleanText(line.rateId, 40) || null,
+    // A standard row (transloading, ocean, insurance, commission) may be left
+    // blank; it is then not part of the quote.
+    standard: line.standard === true,
     type: line.type,
     provider: cleanText(line.provider, 80),
     description: cleanText(line.description, 120),
@@ -57,6 +60,7 @@ function cleanInputs(body) {
     reference: cleanText(body.reference, 60),
     buyer: cleanText(body.buyer, 100),
     commodity: cleanText(body.commodity, 60),
+    grade: cleanText(body.grade, 60),
     destination: cleanText(body.destination, 80),
     incoterm: cleanText(body.incoterm, 20),
     quantity_t: cleanNumber(body.quantity_t, "Quantity", { min: 0, max: 10_000_000 }),
@@ -81,6 +85,7 @@ function summary(quote) {
     reference: quote.inputs.reference,
     buyer: quote.inputs.buyer,
     commodity: quote.inputs.commodity,
+    grade: quote.inputs.grade || "",
     quantity_t: quote.inputs.quantity_t,
     quoteDate: quote.inputs.quoteDate,
     landedPerTonneCAD: r.landedPerTonneCAD,

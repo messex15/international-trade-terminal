@@ -181,6 +181,29 @@ await step("quotes are recomputed on the server, listed and deleted", async () =
   assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
 });
 
+await step("grade, customer, standard rows and a commission on the sale price are saved and recomputed", async () => {
+  const blank = (type, basis, currency = "CAD") => ({ rateId: null, standard: true, type, basis, amount: "", currency, capacity_t: "" });
+  const body = {
+    reference: `Q-STD-${RUN}`, buyer: "PT Example", commodity: "Yellow peas", grade: "No. 2 or better", quantity_t: 100, quoteDate: "2026-10-02",
+    purchasePrice: 500, purchaseCurrency: "CAD", targetMarginPct: 8, minMarginPct: 4,
+    lines: [
+      { ...blank("transload", "per_tonne"), amount: 20 },
+      blank("ocean", "per_container", "USD"),
+      blank("insurance", "percent_of_value"),
+      { ...blank("commission", "percent_of_sale"), amount: 2 },
+    ],
+  };
+  const res = await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body });
+  assert.equal(res.status, 201, await res.clone().text());
+  const { quote } = await res.json();
+  assert.equal(quote.inputs.grade, "No. 2 or better");
+  assert.equal(quote.inputs.lines.filter((l) => l.standard).length, 4, "blank standard rows are kept with the quote");
+  assert.ok(Math.abs(quote.result.targetPricePerTonneCAD - 520 / 0.9) < 1e-9, "target price covers the 2% commission");
+  const { quotes } = await (await req("/api/freight/quotes", { cookie: MEMBER })).json();
+  assert.equal(quotes.find((q) => q.id === quote.id).grade, "No. 2 or better");
+  assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+});
+
 await step("the member's link list shows the client link in use; revoking ends it", async () => {
   const { links } = await (await req("/api/freight/access-links", { cookie: MEMBER })).json();
   const mine = links.find((l) => l.id === client.linkId);

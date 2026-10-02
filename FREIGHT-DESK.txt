@@ -13,6 +13,16 @@ A rate memory and landed cost calculator for trading.
 - Margin protection: each line warns when its rate has expired, is older
   than 30 days, is not in effect yet, or a newer rate is on file. A quote
   "holds until" the first expiry among the rates it uses.
+- Standard rows: every quote has Transloading, Ocean freight, Insurance and
+  Commission rows ready to fill in. A row left blank is not part of the quote
+  (no cost, no warnings, not printed). Adding a rate of the same type from
+  rate memory fills the blank row instead of adding another.
+- Commission can be a % of the sale price or an amount per tonne. A % of the
+  sale price is covered by the target and floor prices:
+      price = (goods + other charges) / (1 - margin - commission %)
+  and its cost per tonne is shown at the offered price, or at the target
+  price when no offer is entered.
+- Deal details include the customer and the product grade.
 - Saved quotes: the server recomputes totals and keeps a copy of the rates
   used. Opening a saved quote re-checks it against today's rates.
 - Print / PDF: the top of the page shows "Your company name" from the quote

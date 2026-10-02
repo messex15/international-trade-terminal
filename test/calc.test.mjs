@@ -105,3 +105,72 @@ test("lanes keep history and pick the newest active rate", () => {
   near(percentChange(lane.previous, lane.latest), 5);
   assert.equal(laneKey({ ...base, provider: "  cn " }), laneKey(base));
 });
+
+// ---------------------------------------------------------------- standard rows and commission
+
+const deal = (lines, extra = {}) => ({
+  quantity_t: 100, quoteDate: "2026-10-02", purchasePrice: 500, purchaseCurrency: "CAD", targetMarginPct: 8, minMarginPct: 4, lines, ...extra,
+});
+const loading = { rateId: null, type: "loading", basis: "per_tonne", amount: 20, currency: "CAD" };
+const commissionPct = (amount) => ({ rateId: null, standard: true, type: "commission", basis: "percent_of_sale", amount, currency: "CAD" });
+
+test("commission on the sale price is covered by the target and floor prices", () => {
+  const q = computeQuote(deal([loading, commissionPct(2)]));
+  // 520 of cost before commission: price = 520 / (1 - 8% - 2%)
+  near(q.targetPricePerTonneCAD, 520 / 0.9);
+  near(q.floorPricePerTonneCAD, 520 / 0.94);
+  const p = q.targetPricePerTonneCAD;
+  near((p - (520 + 0.02 * p)) / p, 0.08); // exactly the target margin after paying commission
+  assert.equal(q.saleBasedAt, "target");
+  assert.equal(q.saleBasedPct, 2);
+  near(q.lines[1].perTonneCAD, 0.02 * p);
+  assert.equal(q.lines[1].atPrice, "target");
+  near(q.landedPerTonneCAD, 520 + 0.02 * p);
+  assert.equal(q.hasInputErrors, false);
+});
+
+test("with an offered price, commission is charged on that price", () => {
+  const q = computeQuote(deal([loading, commissionPct(2)], { salePrice: 600, saleCurrency: "CAD" }));
+  near(q.lines[1].perTonneCAD, 12);
+  near(q.landedPerTonneCAD, 532);
+  near(q.sale.marginPct, ((600 - 532) / 600) * 100);
+  assert.equal(q.saleBasedAt, "offered");
+});
+
+test("commission can also be an amount per tonne", () => {
+  const q = computeQuote(deal([loading, { ...commissionPct(3), basis: "per_tonne" }]));
+  near(q.landedPerTonneCAD, 523);
+  near(q.targetPricePerTonneCAD, 523 / 0.92);
+  assert.equal(q.saleBasedPct, 0);
+  assert.equal(q.saleBasedAt, null);
+});
+
+test("blank standard rows are left out, even a USD ocean row with no exchange rate", () => {
+  const blank = (type, basis, currency = "CAD") => ({ rateId: null, standard: true, type, basis, amount: "", currency, capacity_t: "" });
+  const q = computeQuote(deal([
+    blank("transload", "per_tonne"), blank("ocean", "per_container", "USD"), blank("insurance", "percent_of_value"), blank("commission", "percent_of_sale"),
+  ]));
+  assert.equal(q.hasInputErrors, false);
+  assert.deepEqual(q.issues, []);
+  near(q.landedPerTonneCAD, 500);
+  near(q.targetPricePerTonneCAD, 500 / 0.92);
+  assert.ok(q.lines.every((l) => l.unused && l.flags.length === 0 && l.perTonneCAD === null));
+});
+
+test("a filled-in standard row counts, and a USD one needs the exchange rate", () => {
+  const ocean = { rateId: null, standard: true, type: "ocean", basis: "per_container", amount: 2000, currency: "USD", capacity_t: 25 };
+  assert.equal(computeQuote(deal([ocean])).hasInputErrors, true);
+  const q = computeQuote(deal([ocean], { usdcad: 1.4 }));
+  near(q.landedPerTonneCAD, 500 + (4 * 2000 * 1.4) / 100);
+});
+
+test("a blank charge that is not a standard row is still an error", () => {
+  const q = computeQuote(deal([{ rateId: null, type: "other", basis: "per_tonne", amount: "", currency: "CAD" }]));
+  assert.equal(q.hasInputErrors, true);
+});
+
+test("target margin plus commission of 100% or more is an input error", () => {
+  const q = computeQuote(deal([commissionPct(40)], { targetMarginPct: 60 }));
+  assert.equal(q.hasInputErrors, true);
+  assert.equal(q.targetPricePerTonneCAD, null);
+});

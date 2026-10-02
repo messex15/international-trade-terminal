@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import {
   BASES, RATE_TYPES, compareRatesNewestFirst, computeQuote, daysBetween, formatDate,
-  groupLanes, isoToday, laneKey, percentChange,
+  groupLanes, isUnusedLine, isoToday, laneKey, percentChange,
 } from './calc.js';
 
 const h = React.createElement;
@@ -42,12 +42,13 @@ const pctSetting = (v) => (Number.isFinite(v) ? `${Number.isInteger(v) ? v : v.t
 
 function basisText(r) {
   if (r.basis === 'percent_of_value') return 'of goods value';
+  if (r.basis === 'percent_of_sale') return 'of sale price';
   const basis = BASES[r.basis];
   const cap = basis?.needsCapacity && r.capacity_t ? `, ${tonnes(Number(r.capacity_t))}` : '';
   return `${basis?.label || ''}${cap}`;
 }
 function amountText(r) {
-  return r.basis === 'percent_of_value' ? `${Number(r.amount)}%` : money(Number(r.amount), r.currency);
+  return BASES[r.basis]?.percent ? `${Number(r.amount)}%` : money(Number(r.amount), r.currency);
 }
 const rateText = (r) => `${amountText(r)} ${basisText(r)}`;
 function routeText(r) {
@@ -75,9 +76,25 @@ function Change({ value }) {
 
 const DRAFT_KEY = 'ainu-freight-draft-v1';
 const DEFAULT_BASIS = {
-  rail: 'per_car', truck: 'per_truckload', loading: 'per_tonne', port: 'per_tonne',
-  ocean: 'per_container', inspection: 'per_shipment', insurance: 'percent_of_value', other: 'per_tonne',
+  rail: 'per_car', truck: 'per_truckload', loading: 'per_tonne', transload: 'per_tonne', port: 'per_tonne',
+  ocean: 'per_container', inspection: 'per_shipment', insurance: 'percent_of_value', commission: 'percent_of_sale', other: 'per_tonne',
 };
+// Every quote has these rows ready to fill in. Left blank, a row is not part of
+// the quote (no cost, not printed). Adding a rate of the same type from rate
+// memory takes over the blank row.
+const STANDARD_LINES = [
+  { type: 'transload', currency: 'CAD' },
+  { type: 'ocean', currency: 'USD' },
+  { type: 'insurance', currency: 'CAD' },
+  { type: 'commission', currency: 'CAD' },
+];
+function standardLine({ type, currency }) {
+  return { rateId: null, standard: true, type, provider: '', description: '', basis: DEFAULT_BASIS[type], amount: '', currency, capacity_t: '' };
+}
+/** Adds a blank standard row for each standard charge the quote does not have yet. */
+function withStandardLines(lines = []) {
+  return [...lines, ...STANDARD_LINES.filter((s) => !lines.some((l) => l.type === s.type)).map(standardLine)];
+}
 const COMMODITIES = ['Yellow peas', 'Green peas', 'Red lentils', 'Green lentils', 'Fava beans', 'Chickpeas', 'Canola', 'Flax seed', 'Mustard seed', 'Durum', 'Oats'];
 
 // Printed at the top of the PDF. Each person can change it; new quotes keep
@@ -86,14 +103,15 @@ const DEFAULT_COMPANY = 'International Trade Terminal';
 
 function blankQuote() {
   return {
-    companyName: DEFAULT_COMPANY, reference: '', buyer: '', commodity: '', destination: '', quantity_t: '', quoteDate: isoToday(),
+    companyName: DEFAULT_COMPANY, reference: '', buyer: '', commodity: '', grade: '', destination: '', quantity_t: '', quoteDate: isoToday(),
     purchasePrice: '', purchaseCurrency: 'CAD', usdcad: '', usdcadDate: '',
-    targetMarginPct: 8, minMarginPct: 4, salePrice: '', saleCurrency: 'USD', lines: [],
+    targetMarginPct: 8, minMarginPct: 4, salePrice: '', saleCurrency: 'USD', lines: withStandardLines(),
   };
 }
 function loadDraft() {
   try {
-    return { ...blankQuote(), ...(JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null') || {}) };
+    const draft = { ...blankQuote(), ...(JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null') || {}) };
+    return { ...draft, lines: withStandardLines(Array.isArray(draft.lines) ? draft.lines : []) };
   } catch {
     return blankQuote();
   }
@@ -256,7 +274,10 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   const view = tab === 'access' && !canManageAccess ? 'quote' : tab;
 
   const replaceRate = (rate) => setRates((all) => all.map((r) => (r.id === rate.id ? rate : r)));
-  const addLine = (line) => setQuote((q) => ({ ...q, lines: [...q.lines, line] }));
+  const addLine = (line) => setQuote((q) => {
+    const blank = q.lines.findIndex((l) => l.type === line.type && isUnusedLine(l));
+    return { ...q, lines: blank >= 0 ? q.lines.map((l, j) => (j === blank ? line : l)) : [...q.lines, line] };
+  });
 
   async function saveQuote() {
     setSaving(true);
@@ -274,7 +295,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   }
 
   function newQuote() {
-    if (quote.lines.length && !confirm('Start a new quote? The current one is cleared unless you saved it.')) return;
+    if (quote.lines.some((l) => !isUnusedLine(l)) && !confirm('Start a new quote? The current one is cleared unless you saved it.')) return;
     setQuote((q) => ({ ...blankQuote(), companyName: q.companyName, targetMarginPct: q.targetMarginPct, minMarginPct: q.minMarginPct, usdcad: q.usdcad, usdcadDate: q.usdcadDate }));
   }
 
@@ -330,7 +351,8 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   async function openSavedQuote(id) {
     try {
       const { quote: saved } = await api(`quotes/${id}`);
-      const next = { ...blankQuote(), companyName: quote.companyName, ...saved.inputs };
+      const loaded = { ...blankQuote(), companyName: quote.companyName, ...saved.inputs };
+      const next = { ...loaded, lines: withStandardLines(loaded.lines) };
       setQuote(next);
       setOpenQuote(null);
       setTab('quote');
@@ -463,8 +485,9 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
           h(Field, { label: 'Your company name', hint: 'Printed at the top of the PDF.', className: 'fdNoPrint' },
             input('companyName', { maxLength: 100, placeholder: DEFAULT_COMPANY })),
           h(Field, { label: 'Quote reference' }, input('reference', { maxLength: 60, placeholder: 'Q-2026-041' })),
-          h(Field, { label: 'Buyer' }, input('buyer', { maxLength: 100 })),
+          h(Field, { label: 'Customer' }, input('buyer', { maxLength: 100 })),
           h(Field, { label: 'Commodity' }, input('commodity', { maxLength: 60, list: 'fd-commodities' })),
+          h(Field, { label: 'Grade' }, input('grade', { maxLength: 60, placeholder: 'No. 2 or better' })),
           h(Field, { label: 'Quantity (tonnes)' }, num('quantity_t')),
           h(Field, { label: 'Delivery terms' }, input('destination', { maxLength: 80, placeholder: 'CFR Manila' })),
           h(Field, { label: 'Quote date' }, input('quoteDate', { type: 'date' })))),
@@ -504,7 +527,8 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
   const units = line.units ? h('small', null, `${line.units} ${line.unitLabel} for this quantity`) : null;
   const remove = h('td', { className: 'fdNum' }, h('button', { type: 'button', className: 'iconButton', onClick: () => removeLine(i), 'aria-label': 'Remove this charge' }, h(Trash2, { size: 15 })));
   const computed = [
-    h('td', { key: 'pt', className: 'fdNum' }, h('b', null, money(line.perTonneCAD))),
+    h('td', { key: 'pt', className: 'fdNum' }, h('b', null, money(line.perTonneCAD)),
+      line.atPrice && h('small', null, line.atPrice === 'offered' ? 'at the offered price' : 'at the target price')),
     h('td', { key: 'tot', className: 'fdNum' }, money(line.totalCAD, 'CAD', 0)),
   ];
 
@@ -516,22 +540,32 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
       ...computed, remove);
   }
   const needsCap = BASES[line.basis]?.needsCapacity;
+  const isPercent = Boolean(BASES[line.basis]?.percent);
   const field = (key, props) => h('input', { value: line[key] ?? '', onChange: setLine(i, key), ...props });
-  return h('tr', null,
+  const typeName = RATE_TYPES[line.type];
+  let note = 'One-off charge, not saved to rate memory.';
+  if (line.unused) note = 'Not included. Enter an amount to add it to this quote.';
+  else if (line.standard) note = 'Typed in for this quote, not saved to rate memory.';
+  // A blank standard row is not part of the quote, so it is not printed.
+  return h('tr', { className: line.unused ? 'fdNoPrint fdUnused' : undefined },
     h('td', { colSpan: 2, className: 'fdWrap' },
       // On paper the edit boxes would cut text off, so print the charge as text.
       h('div', { className: 'fdPrintOnly' },
-        h('b', null, line.description || RATE_TYPES[line.type]),
-        h('small', null, `${RATE_TYPES[line.type]}, one-off charge`),
+        h('b', null, line.description || typeName),
+        line.standard
+          ? line.description && h('small', null, typeName)
+          : h('small', null, `${typeName}, one-off charge`),
         line.amount !== '' && line.amount !== null && h('small', null, rateText(line))),
       h('div', { className: 'fdLineEdit fdNoPrint' },
-        h('select', { value: line.type, onChange: setLine(i, 'type'), 'aria-label': 'Charge type' }, Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v))),
-        field('description', { placeholder: 'Charged by or what it is', maxLength: 120, 'aria-label': 'Description' }),
-        field('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: 'Amount', 'aria-label': 'Amount' }),
-        h('select', { value: line.currency, onChange: setLine(i, 'currency'), 'aria-label': 'Currency' }, h('option', null, 'CAD'), h('option', null, 'USD')),
-        h('select', { value: line.basis, onChange: setLine(i, 'basis'), 'aria-label': 'Billed' }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label))),
-        needsCap && field('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: `Tonnes per ${BASES[line.basis].unit}`, 'aria-label': 'Tonnes per unit' })),
-      h('small', { className: 'fdNoPrint' }, 'One-off charge, not saved to rate memory.'), units, flagList),
+        line.standard
+          ? h('span', { className: 'fdLineType' }, typeName)
+          : h('select', { value: line.type, onChange: setLine(i, 'type'), 'aria-label': 'Charge type' }, Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v))),
+        field('description', { placeholder: line.standard ? `${typeName} by (optional)` : 'Charged by or what it is', maxLength: 120, 'aria-label': `${typeName} description` }),
+        field('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: isPercent ? '%' : 'Amount', 'aria-label': `${typeName} amount` }),
+        h('select', { value: isPercent ? 'CAD' : line.currency, onChange: setLine(i, 'currency'), disabled: isPercent, 'aria-label': `${typeName} currency` }, h('option', null, 'CAD'), h('option', null, 'USD')),
+        h('select', { value: line.basis, onChange: setLine(i, 'basis'), 'aria-label': `${typeName} billed` }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label))),
+        needsCap && field('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: `Tonnes ${BASES[line.basis].short}`, title: `Tonnes per ${BASES[line.basis].unit}`, 'aria-label': `${typeName} tonnes per unit` })),
+      h('small', { className: 'fdNoPrint' }, note), units, flagList),
     ...computed, remove);
 }
 
@@ -561,6 +595,8 @@ function QuoteSummary({ quote, result: r, onSave, saving }) {
           h(Row, { label: 'Freight and charges per tonne', value: money(r.chargesPerTonneCAD) }),
           h(Row, { label: 'Landed cost per tonne', value: money(r.landedPerTonneCAD), total: true }),
           h(Row, { label: 'Landed cost, whole shipment', value: money(r.landedTotalCAD, 'CAD', 0) })),
+        r.saleBasedAt && h('p', { className: 'fdHolds' },
+          `Includes ${pctSetting(r.saleBasedPct)} of the sale price (commission), worked out at the ${r.saleBasedAt} price. The target and floor prices cover it.`),
         h('div', { className: 'fdFigure' },
           h('small', null, `Lowest price at ${pctSetting(r.targetMarginPct)} margin`),
           h('strong', null, money(r.targetPricePerTonneCAD), h('span', null, ' /t')),
@@ -680,7 +716,7 @@ function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const body = { ...form, currency: form.basis === 'percent_of_value' ? 'CAD' : form.currency };
+    const body = { ...form, currency: BASES[form.basis]?.percent ? 'CAD' : form.currency };
     try {
       if (editing) {
         const { rate } = await api(`rates/${initial.id}`, { method: 'PUT', body });
@@ -717,7 +753,7 @@ function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
         h(Field, { label: 'Billed' }, h('select', { value: form.basis, onChange: set('basis') }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label)))),
         h(Field, { label: 'Amount' }, h('span', { className: 'fdCombo' },
           input('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', required: true }),
-          h('select', { value: form.currency, onChange: set('currency'), disabled: form.basis === 'percent_of_value', 'aria-label': 'Currency' }, h('option', null, 'CAD'), h('option', null, 'USD')))),
+          h('select', { value: form.currency, onChange: set('currency'), disabled: Boolean(BASES[form.basis]?.percent), 'aria-label': 'Currency' }, h('option', null, 'CAD'), h('option', null, 'USD')))),
         basis?.needsCapacity
           ? h(Field, { label: `Tonnes per ${basis.unit}`, hint: 'Turns the rate into a cost per tonne.' }, input('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any' }))
           : h('span', { 'aria-hidden': true }),
@@ -782,21 +818,21 @@ function marginBadge(q) {
 
 function QuotesView({ quotes, onOpen }) {
   const [query, setQuery] = useState('');
-  const visible = quotes.filter((q) => !query.trim() || [q.reference, q.buyer, q.commodity, q.createdBy].join(' ').toLowerCase().includes(query.trim().toLowerCase()));
+  const visible = quotes.filter((q) => !query.trim() || [q.reference, q.buyer, q.commodity, q.grade, q.createdBy].join(' ').toLowerCase().includes(query.trim().toLowerCase()));
   return h('section', { className: 'card dataCard' },
     h('div', { className: 'toolbar' },
       h('div', { className: 'pageSearch' }, h(Search, { size: 15 }),
-        h('input', { 'aria-label': 'Search saved quotes', placeholder: 'Search reference, buyer or commodity...', value: query, onChange: (e) => setQuery(e.target.value) })),
+        h('input', { 'aria-label': 'Search saved quotes', placeholder: 'Search reference, customer or commodity...', value: query, onChange: (e) => setQuery(e.target.value) })),
       h('span', { className: 'recordCount' }, `${visible.length} quote${visible.length === 1 ? '' : 's'}`)),
     visible.length
       ? h('div', { className: 'tableWrap' },
         h('table', null,
-          h('thead', null, h('tr', null, ['Quote date', 'Reference', 'Buyer', 'Commodity', 'Tonnes', 'Landed /t', 'Offered /t', 'Margin', 'Holds until'].map((c) => h('th', { key: c, className: ['Tonnes', 'Landed /t', 'Offered /t'].includes(c) ? 'fdNum' : undefined }, c)))),
+          h('thead', null, h('tr', null, ['Quote date', 'Reference', 'Customer', 'Commodity', 'Tonnes', 'Landed /t', 'Offered /t', 'Margin', 'Holds until'].map((c) => h('th', { key: c, className: ['Tonnes', 'Landed /t', 'Offered /t'].includes(c) ? 'fdNum' : undefined }, c)))),
           h('tbody', null, visible.map((q) => h('tr', { key: q.id, tabIndex: 0, onClick: () => onOpen(q), onKeyDown: (e) => { if (e.key === 'Enter') onOpen(q); } },
             h('td', null, formatDate(q.quoteDate), h('small', null, `by ${q.createdBy}`)),
             h('td', null, h('b', null, q.reference || 'No reference')),
             h('td', null, q.buyer),
-            h('td', null, q.commodity),
+            h('td', null, q.commodity, q.grade && h('small', null, q.grade)),
             h('td', { className: 'fdNum' }, tonnes(q.quantity_t)),
             h('td', { className: 'fdNum' }, money(q.landedPerTonneCAD)),
             h('td', { className: 'fdNum' }, money(q.salePerTonneCAD)),
@@ -810,9 +846,9 @@ function QuoteDrawer({ summary: q, onClose, onLoad, onDelete }) {
     h('aside', { className: 'drawer' },
       h(PanelHead, { kicker: 'Saved quote', title: q.reference || 'No reference', onClose }),
       h('div', { className: 'drawerBody' },
-        q.commodity && h('div', { className: 'businessTag' }, q.commodity),
+        q.commodity && h('div', { className: 'businessTag' }, [q.commodity, q.grade].filter(Boolean).join(', ')),
         h('div', { className: 'detailGrid' },
-          [['Buyer', q.buyer || 'Not set'], ['Quote date', formatDate(q.quoteDate)], ['Quantity', tonnes(q.quantity_t)],
+          [['Customer', q.buyer || 'Not set'], ['Quote date', formatDate(q.quoteDate)], ['Quantity', tonnes(q.quantity_t)],
             ['Landed cost per tonne', money(q.landedPerTonneCAD)], ['Lowest price at target', money(q.targetPricePerTonneCAD)],
             ['Offered per tonne', q.salePerTonneCAD === null ? 'Not set' : money(q.salePerTonneCAD)],
             ['Margin', q.marginPct === null ? 'No offer entered' : `${pct(q.marginPct)}${q.belowFloor ? ', below floor' : ''}`],

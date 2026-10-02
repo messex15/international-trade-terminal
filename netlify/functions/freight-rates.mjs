@@ -36,7 +36,7 @@ function validateRate(body) {
   const provider = cleanText(body.provider, 80);
   if (!provider) throw new HttpError(400, "Enter who is charging this (carrier, elevator, terminal).");
 
-  const isPercent = body.basis === "percent_of_value";
+  const isPercent = Boolean(BASES[body.basis].percent);
   const amount = cleanNumber(body.amount, "Amount", { min: 0, max: isPercent ? 100 : 10_000_000, required: true });
   const currency = isPercent ? "CAD" : body.currency;
   if (!CURRENCIES.includes(currency)) throw new HttpError(400, "Currency must be CAD or USD.");
