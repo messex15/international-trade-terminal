@@ -78,6 +78,7 @@
 .fdVerdict.warn{background:#fff8e7;color:#715d2e;border-color:#eedaa6}
 .fdVerdict.bad{background:#fdeceb;color:#9f443c;border-color:#f3cbc7}
 .fdFinal{margin-top:6px;border-top:1px solid #dfe6ef}
+.fdFinalTitle{padding:11px 17px 2px;font-size:11px;font-weight:800;color:#16263a}
 .fdPushLeft{margin-right:auto}
 .fdHolds{margin:10px 17px 0;font-size:10px;color:#66778a;line-height:1.5}
 .fdHolds b{color:#253b51}

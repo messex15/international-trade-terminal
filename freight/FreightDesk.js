@@ -593,7 +593,9 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
           h(Field, { label: 'Commodity' }, input('commodity', { maxLength: 60, list: 'fd-commodities' })),
           h(Field, { label: 'Grade' }, input('grade', { maxLength: 60, placeholder: 'No. 2 or better' })),
           h(Field, { label: 'Quantity (MT)' }, num('quantity_t')),
-          h(Field, { label: 'Delivery terms' }, input('destination', { maxLength: 80, placeholder: 'CFR Manila' })),
+          // Optional: left off the PDF when blank.
+          h(Field, { label: h(React.Fragment, null, 'Delivery terms', h('span', { className: 'fdNoPrint' }, ' (optional)')), className: String(quote.destination || '').trim() ? undefined : 'fdNoPrint' },
+            input('destination', { maxLength: 80, placeholder: 'CFR Manila' })),
           h(Field, { label: 'Quote date' }, input('quoteDate', { type: 'date' })))),
       h('section', { className: 'card' },
         h('div', { className: 'cardTitle' }, h('h3', null, 'Price and margin')),
@@ -688,10 +690,12 @@ function FinalBlock({ quote, result: r }) {
   if (f.source === 'entered') perTonne = `${money(Number(quote.salePrice), quote.saleCurrency)}${inUSD ? ` (${money(f.perTonneCAD)})` : ''}`;
   else if (inUSD && f.perTonneUSD !== null) perTonne = `${money(f.perTonneUSD, 'USD')} (${money(f.perTonneCAD)})`;
   const whole = inUSD && f.totalUSD !== null ? `${money(f.totalUSD, 'USD', 0)} (${money(f.totalCAD, 'CAD', 0)})` : money(f.totalCAD, 'CAD', 0);
+  const customer = String(quote.buyer || '').trim();
   return h('div', { className: 'fdFinal' },
+    h('div', { className: 'fdFinalTitle' }, customer ? `Final price for ${customer}` : 'Final price'),
     h('div', { className: 'fdRows' },
-      h(Row, { label: 'Final price per MT', value: perTonne }),
-      h(Row, { label: 'Final price, whole shipment', value: whole }),
+      h(Row, { label: 'Per MT', value: perTonne }),
+      h(Row, { label: 'Whole shipment', value: whole }),
       h(Row, { label: 'Margin', value: pct(f.marginPct) }),
       h(Row, { label: 'Estimated earnings per MT', value: money(f.earningsPerTonneCAD) }),
       h(Row, { label: 'Estimated earnings', value: money(f.earningsTotalCAD, 'CAD', 0), total: true })),
