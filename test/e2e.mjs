@@ -189,4 +189,19 @@ await step("the member's link list shows the client link in use; revoking ends i
   assert.equal((await req("/api/freight/rates", { cookie: client.cookie })).status, 401);
 });
 
+await step("members clear finished links from the history; live links are kept", async () => {
+  const fresh = await req("/api/freight/access-links", { method: "POST", cookie: MEMBER, body: { label: `Unopened ${RUN}`, expiresHours: 24 } });
+  const freshId = (await fresh.json()).link.id;
+  assert.equal((await req("/api/freight/access-links", { method: "DELETE", cookie: MEMBER })).status, 400, "a bare DELETE clears nothing");
+  assert.equal((await req("/api/freight/access-links?clear=finished", { method: "DELETE", cookie: client.cookie })).status, 403);
+  const cleared = await req("/api/freight/access-links?clear=finished", { method: "DELETE", cookie: MEMBER });
+  assert.equal(cleared.status, 200);
+  assert.ok((await cleared.json()).removed >= 1);
+  const { links } = await (await req("/api/freight/access-links", { cookie: MEMBER })).json();
+  assert.ok(!links.some((l) => l.id === client.linkId), "the revoked link is gone");
+  assert.ok(links.some((l) => l.id === freshId), "the unopened link is kept");
+  assert.ok(links.every((l) => l.status === "In use" || l.status === "Not opened yet"));
+  assert.equal((await req("/api/freight/rates", { cookie: client.cookie })).status, 401, "a cleared link still grants nothing");
+});
+
 console.log(`\n${passed} checks passed against ${BASE}`);

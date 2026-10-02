@@ -784,6 +784,7 @@ function QuoteDrawer({ summary: q, onClose, onLoad, onDelete }) {
 // ------------------------------------------------------------------ client access
 
 const LINK_STATUS = { 'In use': 'badge good', 'Not opened yet': 'badge', Expired: 'badge warn', Revoked: 'badge bad' };
+const isFinishedLink = (l) => l.status === 'Revoked' || l.status === 'Expired';
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 function AccessView({ api, notify }) {
@@ -792,6 +793,7 @@ function AccessView({ api, notify }) {
   const [created, setCreated] = useState(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const load = useCallback(() => api('access-links').then((d) => setLinks(d.links)).catch((e) => notify(e.message, true)), [api, notify]);
   useEffect(() => { load(); }, [load]);
@@ -835,6 +837,22 @@ function AccessView({ api, notify }) {
     }
   }
 
+  async function clearHistory() {
+    const n = (links || []).filter(isFinishedLink).length;
+    if (!confirm(`Clear ${n} revoked or expired link${n === 1 ? '' : 's'} from the history? This cannot be undone. Links that are in use or not opened yet are kept.`)) return;
+    setClearing(true);
+    try {
+      const { removed } = await api('access-links?clear=finished', { method: 'DELETE' });
+      notify(removed ? `Cleared ${removed} finished link${removed === 1 ? '' : 's'} from the history.` : 'There was nothing to clear.');
+      await load();
+    } catch (err) {
+      notify(err.message, true);
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  const finishedCount = (links || []).filter(isFinishedLink).length;
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   return h(React.Fragment, null,
     h('section', { className: 'card fdAccessCard' },
@@ -853,7 +871,11 @@ function AccessView({ api, notify }) {
     h('section', { className: 'card dataCard' },
       h('div', { className: 'toolbar' },
         h('span', { className: 'fdToolbarTitle' }, 'All client links'),
-        h('span', { className: 'recordCount' }, links ? `${links.length} link${links.length === 1 ? '' : 's'}` : '')),
+        h('span', { className: 'recordCount' }, links ? `${links.length} link${links.length === 1 ? '' : 's'}` : ''),
+        finishedCount > 0 && h(Button, {
+          icon: Trash2, className: 'secondary fdDanger', onClick: clearHistory, disabled: clearing,
+          title: 'Delete revoked and expired links. Links in use or not opened yet are kept.',
+        }, clearing ? 'Clearing…' : `Clear history (${finishedCount})`)),
       links === null ? h(Empty, { label: 'Loading links…' })
         : links.length === 0 ? h(Empty, { label: 'No client links yet. Create one above to give someone access.' })
           : h('div', { className: 'tableWrap' },

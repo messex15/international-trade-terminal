@@ -33,6 +33,8 @@ CLIENT LINKS
    and signs in their browser until you revoke access. Each visit renews
    the sign-in, so it does not lapse while they keep using the desk.
 4. Revoke ends their access on their next click.
+5. Clear history deletes revoked and expired links from the list for good.
+   Links in use or not opened yet are kept, so nobody loses access.
 - The page asks for a button press on purpose: email security scanners
   open links automatically, and would otherwise use them up.
 - One link = one person, one browser. For a second device, make a second link.

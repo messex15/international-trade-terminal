@@ -4,6 +4,9 @@
 // POST   /api/freight/access-links        create a single-use link
 //        { label, expiresHours? }   once opened, access lasts until revoked
 // DELETE /api/freight/access-links/:id    revoke a link (also ends its session)
+// DELETE /api/freight/access-links?clear=finished
+//        clear history: deletes revoked and expired links. Links in use or
+//        not opened yet are kept, so nobody loses access.
 import {
   accessStore,
   assertSameOrigin,
@@ -24,6 +27,9 @@ function status(link, now = Date.now()) {
   if (Date.parse(link.expiresAt) <= now) return "Expired";
   return "Not opened yet";
 }
+
+/** Revoked, or expired before anyone opened it: it can never grant access again. */
+const isFinished = (link, now = Date.now()) => ["Revoked", "Expired"].includes(status(link, now));
 
 function publicView(id, link) {
   return {
@@ -80,6 +86,23 @@ export default route(async (req, context) => {
 
     const base = (env("PUBLIC_BASE_URL") || new URL(req.url).origin).replace(/\/$/, "");
     return json({ url: `${base}/freight/access/#${token}`, link: publicView(hash, link) }, 201);
+  }
+
+  if (req.method === "DELETE" && !id) {
+    if (new URL(req.url).searchParams.get("clear") !== "finished") {
+      throw new HttpError(400, "Only finished links can be cleared. Revoke a link first to end its access.");
+    }
+    const now = Date.now();
+    const { blobs } = await store.list({ prefix: "link/" });
+    const removed = await Promise.all(
+      blobs.map(async ({ key }) => {
+        const link = await store.get(key, { type: "json" });
+        if (!link || !isFinished(link, now)) return 0;
+        await store.delete(key);
+        return 1;
+      }),
+    );
+    return json({ removed: removed.reduce((a, b) => a + b, 0) });
   }
 
   if (req.method === "DELETE" && id) {
