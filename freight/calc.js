@@ -130,6 +130,14 @@ export function toCAD(amount, currency, usdcad) {
 }
 
 /**
+ * The currency a charge is billed in. A % charge is worked out from CAD
+ * amounts (goods value, final price), so it is in CAD whatever is picked.
+ */
+export function chargeCurrency(line) {
+  return line.currency === "USD" && !BASES[line.basis]?.percent ? "USD" : "CAD";
+}
+
+/**
  * Cost of one line per tonne of cargo, in CAD.
  * Per-unit charges (railcar, container, truckload) are billed per whole unit,
  * so a partial car costs a full car: units = ceil(quantity / capacity).
@@ -215,8 +223,9 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
   const floorMargin = num(q.minMarginPct) ?? 0;
   const usesUSD =
     q.purchaseCurrency === "USD" ||
-    q.saleCurrency === "USD" ||
-    (q.lines || []).some((l) => l.currency === "USD" && !BASES[l.basis]?.percent && !isUnusedLine(l));
+    // The final price's currency only matters once a price is entered.
+    (q.saleCurrency === "USD" && num(q.salePrice) > 0) ||
+    (q.lines || []).some((l) => chargeCurrency(l) === "USD" && !isUnusedLine(l));
 
   if (!(quantity > 0)) issues.push({ level: "error", code: "input", message: "Enter the quantity in metric tonnes (MT)." });
   if (purchase === null || purchase < 0) issues.push({ level: "error", code: "input", message: "Enter the purchase price per metric tonne." });
@@ -255,7 +264,7 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
   const lines = (q.lines || []).map((line, i) => {
     let cost = costs[i];
     if (cost.unused) {
-      return { ...line, unused: true, perTonneCAD: null, totalCAD: null, units: null, unitLabel: null, flags: [] };
+      return { ...line, unused: true, perTonneCAD: null, totalCAD: null, perTonneUSD: null, totalUSD: null, units: null, unitLabel: null, flags: [] };
     }
     if (cost.salePct !== undefined) {
       cost = referencePrice === null
@@ -265,10 +274,14 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
     const flags = rateFlags(line, quoteDate, staleDays);
     if (cost.error) flags.push({ level: "error", code: "input", message: cost.error });
     const perTonne = cost.perTonne ?? null;
+    // A USD charge is also given in USD, at the quote's exchange rate.
+    const perTonneUSD = perTonne !== null && chargeCurrency(line) === "USD" && usdcad > 0 ? perTonne / usdcad : null;
     return {
       ...line,
       perTonneCAD: perTonne,
       totalCAD: perTonne !== null && quantity > 0 ? perTonne * quantity : null,
+      perTonneUSD,
+      totalUSD: perTonneUSD !== null && quantity > 0 ? perTonneUSD * quantity : null,
       units: cost.units ?? null,
       unitLabel: cost.unitLabel ?? null,
       atPrice: cost.atPrice ?? null,

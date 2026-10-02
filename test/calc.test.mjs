@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chargeLabel, computeQuote, groupLanes, laneKey, lineCost, lineName, percentChange } from "../freight/calc.js";
+import { chargeCurrency, chargeLabel, computeQuote, groupLanes, laneKey, lineCost, lineName, percentChange } from "../freight/calc.js";
 
 const near = (actual, expected, eps = 1e-6) => assert.ok(Math.abs(actual - expected) < eps, `${actual} != ${expected}`);
 
@@ -235,4 +235,34 @@ test("differently named Other charges from the same provider are separate lanes"
 test("a named Other charge shows its name in quote warnings", () => {
   const q = computeQuote(deal([{ rateId: null, type: "other", chargeName: "Fumigation", provider: "", description: "", basis: "per_tonne", amount: "", currency: "CAD" }]));
   assert.ok(q.issues.some((i) => i.message.startsWith("Fumigation: Enter an amount")), JSON.stringify(q.issues));
+});
+
+// ---------------------------------------------------------------- charges in their own currency
+
+test("a USD charge is also given in USD; CAD and % charges are not", () => {
+  const ocean = { rateId: null, type: "ocean", basis: "per_container", amount: 2850, currency: "USD", capacity_t: 25 };
+  const insurance = { rateId: null, type: "insurance", basis: "percent_of_value", amount: 0.3, currency: "USD" };
+  const q = computeQuote(deal([loading, ocean, insurance], { usdcad: 1.4 }));
+  const [l, o, ins] = q.lines;
+  // 100 MT in 25 MT containers = 4 containers of US$2,850
+  near(o.perTonneUSD, (4 * 2850) / 100);
+  near(o.totalUSD, 4 * 2850);
+  near(o.perTonneCAD, (4 * 2850 * 1.4) / 100);
+  assert.equal(l.perTonneUSD, null);
+  assert.equal(ins.perTonneUSD, null, "a % charge is worked out in CAD");
+  assert.deepEqual([l, o, ins].map(chargeCurrency), ["CAD", "USD", "CAD"]);
+});
+
+test("a USD charge without an exchange rate has no USD amount", () => {
+  const ocean = { rateId: null, type: "ocean", basis: "per_tonne", amount: 40, currency: "USD" };
+  const q = computeQuote(deal([ocean]));
+  assert.equal(q.lines[0].perTonneUSD, null);
+  assert.equal(q.lines[0].totalUSD, null);
+});
+
+test("a blank final price in USD does not need an exchange rate", () => {
+  const q = computeQuote(deal([loading], { saleCurrency: "USD", salePrice: "" }));
+  assert.equal(q.hasInputErrors, false, JSON.stringify(q.issues));
+  const priced = computeQuote(deal([loading], { saleCurrency: "USD", salePrice: 400 }));
+  assert.ok(priced.issues.some((i) => i.message === "Enter a USD to CAD exchange rate."));
 });

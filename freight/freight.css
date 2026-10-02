@@ -172,3 +172,5 @@ body.fdPrinting .fd .tableWrap td{padding-top:6px;padding-bottom:6px}
 body.fdPrinting .fdSummary{position:static}
 body.fdPrinting .card{box-shadow:none}
 body.fdPrinting .fd input,body.fdPrinting .fd select{border:0;background:transparent;padding-left:0}
+/* Example text in an empty box is not a value, so it is not printed. */
+body.fdPrinting .fd input::placeholder,body.fdPrinting .fd textarea::placeholder{color:transparent}

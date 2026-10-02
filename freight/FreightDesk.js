@@ -11,7 +11,7 @@ import {
   Link2, PackageSearch, PencilLine, Plus, Printer, RefreshCw, Search, Ship, Trash2, TriangleAlert, Users, X,
 } from 'lucide-react';
 import {
-  BASES, RATE_TYPES, chargeLabel, compareRatesNewestFirst, computeQuote, daysBetween, formatDate,
+  BASES, RATE_TYPES, chargeCurrency, chargeLabel, compareRatesNewestFirst, computeQuote, daysBetween, formatDate,
   groupLanes, isUnusedLine, isoToday, laneKey, percentChange,
 } from './calc.js';
 
@@ -35,6 +35,15 @@ function money(value, currency = 'CAD', digits = 2) {
   const key = currency + digits;
   moneyFormats[key] ??= new Intl.NumberFormat('en-CA', { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits });
   return moneyFormats[key].format(value);
+}
+// A charge's amount in its own currency. When the charges table mixes CAD and
+// USD, each amount is marked (C$ or US$); otherwise the column heading names
+// the currency and the amount shows a plain $.
+function chargeMoney(value, currency, digits, marked) {
+  const text = money(value, currency, digits);
+  if (!text) return text;
+  if (currency === 'USD') return marked ? text : text.replace('US$', '$');
+  return marked ? text.replace('$', 'C$') : text;
 }
 const tonnes = (v) => (Number.isFinite(v) ? `${new Intl.NumberFormat('en-CA', { maximumFractionDigits: 3 }).format(v)} MT` : '');
 const pct = (v) => (Number.isFinite(v) ? `${v.toFixed(1)}%` : '');
@@ -595,6 +604,12 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
   const num = (key, props = {}) => input(key, { type: 'number', inputMode: 'decimal', min: 0, step: 'any', ...props });
   const currency = (key, label) => h('select', { value: quote[key], onChange: set(key), 'aria-label': label }, h('option', null, 'CAD'), h('option', null, 'USD'));
 
+  // The Per MT and Shipment columns are headed with the currency the charges are
+  // in. When CAD and USD charges are mixed, each amount carries its own currency.
+  const chargeCurrencies = new Set(result.lines.filter((l) => !l.unused).map(chargeCurrency));
+  const columnCurrency = chargeCurrencies.size > 1 ? null : chargeCurrencies.has('USD') ? 'USD' : 'CAD';
+  const columnHead = (label) => (columnCurrency ? `${label} (${columnCurrency})` : label);
+
   // Picking a customer from the list also fills their usual delivery terms when
   // the quote has none, or still has the terms of the customer picked before
   // (terms typed by hand are never replaced).
@@ -638,18 +653,19 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
         h('div', { className: 'formGrid fdGrid3' },
           h(Field, { label: 'Purchase price per MT', hint: 'What you pay the grower or supplier.' },
             h('span', { className: 'fdCombo' }, num('purchasePrice'), currency('purchaseCurrency', 'Purchase currency'))),
-          h(Field, { label: 'USD to CAD rate', hint: quote.usdcadDate ? `Bank of Canada rate for ${formatDate(quote.usdcadDate)}.` : 'CAD for one US dollar.' },
+          // Left off the PDF when blank, rather than printing a lone hint or currency.
+          h(Field, { label: 'USD to CAD rate', hint: quote.usdcadDate ? `Bank of Canada rate for ${formatDate(quote.usdcadDate)}.` : 'CAD for one US dollar.', className: printIfFilled(quote.usdcad) },
             h('span', { className: 'fdCombo' }, num('usdcad', { placeholder: '1.3850' }),
               h('button', { type: 'button', className: 'secondary', onClick: fetchFx, disabled: fxBusy, title: 'Use the latest Bank of Canada daily rate' }, fxBusy ? '…' : 'BoC rate'))),
-          h(Field, { label: 'Final price per MT', hint: 'The price for the customer.' },
+          h(Field, { label: 'Final price per MT', hint: 'The price for the customer.', className: printIfFilled(quote.salePrice) },
             h('span', { className: 'fdCombo' }, num('salePrice', { placeholder: 'Optional' }), currency('saleCurrency', 'Final price currency'))))),
       h('section', { className: 'card dataCard fdChargesCard' },
         h('div', { className: 'cardTitle' }, h('h3', null, 'Freight and charges')),
         result.lines.length
           ? h('div', { className: 'tableWrap' },
             h('table', { className: 'fdStatic' },
-              h('thead', null, h('tr', null, h('th', null, 'Charge'), h('th', null, 'Rate'), h('th', { className: 'fdNum' }, 'Per MT (CAD)'), h('th', { className: 'fdNum' }, 'Shipment (CAD)'), h('th', null, h('span', { className: 'fdSr' }, 'Remove')))),
-              h('tbody', null, result.lines.map((line, i) => h(LineRow, { key: i, line, i, rates, setLine, removeLine, useNewer })))))
+              h('thead', null, h('tr', null, h('th', null, 'Charge'), h('th', null, 'Rate'), h('th', { className: 'fdNum' }, columnHead('Per MT')), h('th', { className: 'fdNum' }, columnHead('Shipment')), h('th', null, h('span', { className: 'fdSr' }, 'Remove')))),
+              h('tbody', null, result.lines.map((line, i) => h(LineRow, { key: i, line, i, columnCurrency, rates, setLine, removeLine, useNewer })))))
           : h(Empty, { label: 'No charges yet. Add rail, loading, port and ocean charges from rate memory.' }),
         h('div', { className: 'fdCardFoot' },
           h(Button, { kind: 'primary', icon: Plus, onClick: onPick }, 'Add from rate memory'),
@@ -657,7 +673,7 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
     h('aside', { className: 'fdCalcSide' }, h(QuoteSummary, { quote, result, onSave, saving })));
 }
 
-function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
+function LineRow({ line, i, columnCurrency, rates, setLine, removeLine, useNewer }) {
   const flags = line.flags.filter((f) => f.code !== 'manual');
   const flagList = flags.length > 0 && h('ul', { className: 'fdFlags' }, flags.map((f, k) => h('li', { key: k, className: f.level },
     f.message, f.newerId && h('button', {
@@ -666,10 +682,17 @@ function LineRow({ line, i, rates, setLine, removeLine, useNewer }) {
     }, 'Use newer rate'))));
   const units = line.units ? h('small', null, `${line.units} ${line.unitLabel} for this quantity`) : null;
   const remove = h('td', { className: 'fdNum' }, h('button', { type: 'button', className: 'iconButton', onClick: () => removeLine(i), 'aria-label': 'Remove this charge' }, h(Trash2, { size: 15 })));
+  // A USD charge is shown in USD, with the CAD it adds to the landed cost below.
+  const inUSD = line.perTonneUSD !== null && line.perTonneUSD !== undefined;
+  const marked = !columnCurrency;
   const computed = [
-    h('td', { key: 'pt', className: 'fdNum' }, h('b', null, money(line.perTonneCAD)),
+    h('td', { key: 'pt', className: 'fdNum' },
+      h('b', null, inUSD ? chargeMoney(line.perTonneUSD, 'USD', 2, marked) : chargeMoney(line.perTonneCAD, 'CAD', 2, marked)),
+      inUSD && h('small', null, chargeMoney(line.perTonneCAD, 'CAD', 2, true)),
       line.atPrice && h('small', null, 'at the final price')),
-    h('td', { key: 'tot', className: 'fdNum' }, money(line.totalCAD, 'CAD', 0)),
+    h('td', { key: 'tot', className: 'fdNum' },
+      inUSD ? chargeMoney(line.totalUSD, 'USD', 0, marked) : chargeMoney(line.totalCAD, 'CAD', 0, marked),
+      inUSD && line.totalCAD !== null && h('small', null, chargeMoney(line.totalCAD, 'CAD', 0, true))),
   ];
 
   if (line.rateId) {
