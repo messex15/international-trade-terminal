@@ -51,7 +51,7 @@ const pctSetting = (v) => (Number.isFinite(v) ? `${Number.isInteger(v) ? v : v.t
 
 function basisText(r) {
   if (r.basis === 'percent_of_value') return 'of goods value';
-  if (r.basis === 'percent_of_sale') return 'of sale price';
+  if (r.basis === 'percent_of_sale') return 'of final price';
   const basis = BASES[r.basis];
   const cap = basis?.needsCapacity && r.capacity_t ? `, ${tonnes(Number(r.capacity_t))}` : '';
   return `${basis?.label || ''}${cap}`;
@@ -729,17 +729,20 @@ function LineRow({ line, i, columnCurrency, summaryCurrency, usdcad, rates, setL
   let note = 'One-off charge, not saved to rate memory.';
   if (line.unused) note = 'Not included. Enter an amount to add it to this quote.';
   else if (line.standard) note = 'Typed in for this quote, not saved to rate memory.';
+  const hasAmount = line.amount !== '' && line.amount !== null && line.amount !== undefined;
   // A blank standard row is not part of the quote, so it is not printed.
   return h('tr', { className: line.unused ? 'fdNoPrint fdUnused' : undefined },
-    h('td', { colSpan: 2, className: 'fdWrap' },
-      // On paper the edit boxes would cut text off, so print the charge as text.
-      h('div', { className: 'fdPrintOnly' },
-        h('b', null, line.description || label),
-        line.standard
-          ? line.description && h('small', null, label)
-          : h('small', null, line.description ? `${label}, one-off charge` : 'One-off charge'),
-        line.amount !== '' && line.amount !== null && h('small', null, rateText(line))),
-      h('div', { className: 'fdLineEdit fdNoPrint' },
+    // On paper the edit boxes would cut text off, so the charge prints as text,
+    // with its rate in the Rate column like a charge from rate memory.
+    h('td', { className: 'fdWrap fdPrintCell' },
+      h('b', null, line.description || label),
+      line.standard
+        ? line.description && h('small', null, label)
+        : h('small', null, line.description ? `${label}, one-off charge` : 'One-off charge'),
+      flagList),
+    h('td', { className: 'fdPrintCell' }, hasAmount && h('b', null, amountText(line)), hasAmount && h('small', null, basisText(line)), units),
+    h('td', { colSpan: 2, className: 'fdWrap fdNoPrint' },
+      h('div', { className: 'fdLineEdit' },
         line.standard
           ? h('span', { className: 'fdLineType' }, typeName)
           : h('select', { value: line.type, onChange: setLine(i, 'type'), 'aria-label': 'Charge type' }, Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v))),

@@ -24,9 +24,9 @@ export const BASES = {
   per_truckload: { label: "per truckload", short: "/load", needsCapacity: true, unit: "truckload", plural: "truckloads" },
   per_shipment: { label: "per shipment (flat)", short: "/shipment", needsCapacity: false },
   percent_of_value: { label: "% of goods value", short: "% of value", needsCapacity: false, percent: true },
-  // Charged on the sale price (typically commission). The target and floor
-  // prices are solved so the charge is covered: price = cost / (1 - margin - %).
-  percent_of_sale: { label: "% of sale price", short: "% of sale", needsCapacity: false, percent: true },
+  // Charged on the final price (typically commission). The key keeps its old
+  // name so saved rates and quotes still match.
+  percent_of_sale: { label: "% of final price", short: "% of final", needsCapacity: false, percent: true },
 };
 
 const isBlank = (value) => value === "" || value === null || value === undefined;
@@ -158,7 +158,7 @@ export function lineCost(line, { usdcad, quantity_t, goodsPerTonneCAD, salePerTo
   }
 
   if (line.basis === "percent_of_sale") {
-    // Depends on the sale price, which computeQuote works out first.
+    // Depends on the final price, which computeQuote works out first.
     if (salePerTonneCAD === null) return { salePct: amount };
     return { salePct: amount, perTonne: (salePerTonneCAD * amount) / 100 };
   }
@@ -243,7 +243,7 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
 
   const goodsPerTonne = purchase === null || purchase < 0 ? null : toCAD(purchase, q.purchaseCurrency, usdcad);
 
-  // Pass 1: every charge that does not depend on the sale price.
+  // Pass 1: every charge that does not depend on the final price.
   const costs = (q.lines || []).map((line) =>
     isUnusedLine(line) ? { unused: true } : lineCost(line, { usdcad, quantity_t: quantity, goodsPerTonneCAD: goodsPerTonne }));
   const fixedPerTonne = costs.reduce((sum, c) => sum + (c.salePct === undefined ? c.perTonne ?? 0 : 0), 0);
@@ -254,8 +254,8 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
   // price - (cost + s * price) = m * price, so price = cost / (1 - m - s).
   if (salePct > 0 && targetMargin + salePct >= 100) {
     issues.push({ level: "error", code: "input", message: targetMargin > 0
-      ? "Target margin plus commission must be under 100% of the sale price."
-      : "Commission must be under 100% of the sale price." });
+      ? "Target margin plus commission must be under 100% of the final price."
+      : "Commission must be under 100% of the final price." });
   }
   const priceAt = (margin) =>
     baseLanded === null || margin < 0 || margin + salePct >= 100 ? null : baseLanded / (1 - (margin + salePct) / 100);
@@ -264,8 +264,8 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
 
   const offered = num(q.salePrice);
   const offeredPerTonne = offered !== null && offered > 0 ? toCAD(offered, q.saleCurrency, usdcad) : null;
-  // Charges on the sale price (commission) are worked out on the final price
-  // entered on the quote; without one they cannot be priced yet.
+  // Charges on the final price (commission) need the final price entered on
+  // the quote; without one they cannot be priced yet.
   const saleBasedAt = offeredPerTonne !== null ? "offered" : null;
   const referencePrice = offeredPerTonne;
 
@@ -341,7 +341,7 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
 
   // Final price: the price for the customer, as entered on the quote.
   // Estimated earnings: final price minus the full landed cost (commission on
-  // the sale price included, worked out at that same price).
+  // the final price included, worked out at that same price).
   let final = null;
   const finalPerTonne = offeredPerTonne;
   if (finalPerTonne !== null && finalPerTonne > 0 && landedPerTonne !== null) {

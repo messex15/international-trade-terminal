@@ -114,7 +114,7 @@ const deal = (lines, extra = {}) => ({
 const loading = { rateId: null, type: "loading", basis: "per_tonne", amount: 20, currency: "CAD" };
 const commissionPct = (amount) => ({ rateId: null, standard: true, type: "commission", basis: "percent_of_sale", amount, currency: "CAD" });
 
-test("a commission on the sale price needs the final price", () => {
+test("a commission on the final price needs the final price", () => {
   const q = computeQuote(deal([loading, commissionPct(2)]));
   assert.equal(q.hasInputErrors, true);
   assert.ok(q.issues.some((i) => i.message.startsWith("Commission: Enter a final price per MT first")), JSON.stringify(q.issues));

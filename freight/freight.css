@@ -156,7 +156,7 @@
 /* ---------- Print (only while the Freight Desk prints a quote) ----------
    Not limited to @media print: while printing, the page is also laid out this way
    on screen so the sheet can be measured and fitted on one page (PAGE_FIT). */
-.fdPrintHead,.fdPrintOnly{display:none}
+.fdPrintHead,.fdPrintOnly,.fd td.fdPrintCell{display:none}
 body.fdPrinting{background:#fff}
 body.fdPrinting .fd{margin:0 auto}
 body.fdPrinting .fd .formGrid.fdGrid3{grid-template-columns:1fr 1fr}
@@ -176,6 +176,7 @@ body.fdPrinting .fdCalc{grid-template-rows:auto 1fr auto}
 body.fdPrinting .fd select{-webkit-appearance:none;appearance:none}
 body.fdPrinting .fd .fdCombo button{display:none}
 body.fdPrinting .fdPrintOnly{display:block}
+body.fdPrinting .fd td.fdPrintCell{display:table-cell}
 body.fdPrinting .fdPrintOnly.fdInline{display:inline}
 body.fdPrinting .fdCalcSide{grid-column:2;grid-row:1/span 2}
 body.fdPrinting .fdChargesCard{grid-column:1/-1}
