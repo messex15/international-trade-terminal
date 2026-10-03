@@ -10,8 +10,9 @@ per-unit prices are in metric tonnes, shown as MT.
   copy of the rates they used).
 - Landed cost: build a quote from those rates. Railcar, container and
   truckload charges count whole units. USD converts at a typed rate or the
-  Bank of Canada daily rate. Enter the final price for the customer to see
-  the estimated earnings, or a warning when that price loses money.
+  Bank of Canada daily rate. Shows the lowest price for the target margin,
+  the floor price, and whether a final price meets the target, clears the
+  floor, or loses money.
 - Charges table: a USD charge shows its Per MT and Shipment amounts in USD.
   That includes a % charge (of goods value or of the final price) billed in
   USD: the percentage and its cost are the same, shown in USD.
@@ -32,8 +33,11 @@ per-unit prices are in metric tonnes, shown as MT.
   is not part of the quote (no cost, no warnings, not printed). Adding a
   rate of the same type from rate memory fills the blank row instead of
   adding another.
-- Commission can be a % of the final price or an amount per MT. A % needs
-  the final price per MT, and its cost per MT is worked out from it.
+- Commission can be a % of the final price or an amount per MT. A % is
+  covered by the target and floor prices:
+      price = (goods + other charges) / (1 - margin - commission %)
+  and its cost per MT is shown at the final price, or at the target price
+  when none is entered.
 - Deal details include the customer and the product grade. The quote
   reference and delivery terms are optional; left blank, they are left off
   the PDF, as are a blank USD to CAD rate and final price. Example text in an
@@ -43,9 +47,10 @@ per-unit prices are in metric tonnes, shown as MT.
   name is shown in place of "Other charge" on the quote, the PDF and in rate
   memory. In rate memory the name is required, and each name keeps its own
   rate history.
-- Final price and estimated earnings: shown once a final price per MT is
-  entered on the quote. Estimated earnings = final price - landed cost (all
-  charges, commission included), for the whole shipment.
+- Final price, margin and estimated earnings: the final price is the price
+  entered on the quote, or the lowest price at the target margin when none is
+  entered. Estimated earnings = final price - landed cost (all charges,
+  commission included), for the whole shipment.
 - Customers: lists of the companies you quote to, with contact and usual
   delivery terms. Pick one in the quote's Customer box; its delivery terms
   fill in if the quote has none. Saving a quote for a customer not on the
@@ -147,6 +152,9 @@ IDENTITY_API_URL points the site at a stand-in for Netlify Identity. Never
 set it in production.
 
 SETTINGS WORTH REVIEWING
+- Default target margin 8% and floor 4% (blankQuote in FreightDesk.js).
+  Each quote can change them; new quotes keep the last ones used.
+- Margin = gross margin on the final price: (final - landed cost) / final.
 - A rate counts as old after 30 days (staleDays in freight/calc.js).
 - FREIGHT_MEMBER_ROLE changes which Identity role counts as staff
   (default member, matching _redirects).

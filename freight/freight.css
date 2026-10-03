@@ -205,5 +205,8 @@ body.fdPrinting .fdPrintHead{margin-bottom:10px}
 body.fdPrinting .fdRow{padding:5px 0}
 body.fdPrinting .fdFinalTitle{padding-top:8px}
 body.fdPrinting .fdFine{margin-top:8px;margin-bottom:12px}
+body.fdPrinting .fdFigure{margin:6px 17px;padding:8px 12px}
+body.fdPrinting .fdFigure strong{font-size:20px}
+body.fdPrinting .fdHolds{margin-top:7px}
 /* Example text in an empty box is not a value, so it is not printed. */
 body.fdPrinting .fd input::placeholder,body.fdPrinting .fd textarea::placeholder{color:transparent}

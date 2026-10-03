@@ -239,7 +239,7 @@ await step("grade, customer, standard rows and a commission on the final price a
   const blank = (type, basis, currency = "CAD") => ({ rateId: null, standard: true, type, basis, amount: "", currency, capacity_t: "" });
   const body = {
     reference: `Q-STD-${RUN}`, buyer: "PT Example", commodity: "Yellow peas", grade: "No. 2 or better", quantity_t: 100, quoteDate: "2026-10-02",
-    purchasePrice: 500, purchaseCurrency: "CAD", salePrice: 600, saleCurrency: "CAD",
+    purchasePrice: 500, purchaseCurrency: "CAD", targetMarginPct: 8, minMarginPct: 4, salePrice: 600, saleCurrency: "CAD",
     lines: [
       { ...blank("transload", "per_tonne"), amount: 20 },
       blank("labour", "per_tonne"),
@@ -255,8 +255,15 @@ await step("grade, customer, standard rows and a commission on the final price a
   assert.equal(quote.inputs.lines.filter((l) => l.standard).length, 5, "blank standard rows are kept with the quote");
   assert.ok(Math.abs(quote.result.landedPerTonneCAD - 532) < 1e-9, "2% commission on the 600 final price");
   assert.ok(Math.abs(quote.result.final.earningsTotalCAD - 6800) < 1e-9, "estimated earnings");
+  assert.equal(quote.inputs.targetMarginPct, 8, "margins are kept with the quote");
+  assert.equal(quote.inputs.minMarginPct, 4);
+  // With no final price, the target price covers the 2% commission and is the final price.
   const noPrice = await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body: { ...body, salePrice: "" } });
-  assert.equal(noPrice.status, 400, "a % commission needs the final price");
+  assert.equal(noPrice.status, 201, await noPrice.clone().text());
+  const atTarget = (await noPrice.json()).quote;
+  assert.ok(Math.abs(atTarget.result.targetPricePerTonneCAD - 520 / 0.9) < 1e-9, "target price covers the 2% commission");
+  assert.equal(atTarget.result.final.source, "target");
+  assert.equal((await req(`/api/freight/quotes/${atTarget.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
   const { quotes } = await (await req("/api/freight/quotes", { cookie: MEMBER })).json();
   assert.equal(quotes.find((q) => q.id === quote.id).grade, "No. 2 or better");
   assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);

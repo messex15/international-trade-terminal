@@ -75,6 +75,8 @@ function cleanInputs(body) {
     purchaseCurrency: cleanCurrency(body.purchaseCurrency),
     usdcad: cleanNumber(body.usdcad, "Exchange rate", { min: 0, max: 10 }),
     usdcadDate: cleanDate(body.usdcadDate, "Exchange rate date"),
+    targetMarginPct: cleanNumber(body.targetMarginPct, "Target margin", { min: 0, max: 99.9 }),
+    minMarginPct: cleanNumber(body.minMarginPct, "Margin floor", { min: 0, max: 99.9 }),
     salePrice: cleanNumber(body.salePrice, "Final price", { min: 0, max: 1_000_000 }),
     saleCurrency: cleanCurrency(body.saleCurrency),
     summaryCurrency: cleanCurrency(body.summaryCurrency),
