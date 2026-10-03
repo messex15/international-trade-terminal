@@ -45,7 +45,7 @@ function validateRate(body) {
 
   const isPercent = Boolean(BASES[body.basis].percent);
   const amount = cleanNumber(body.amount, "Amount", { min: 0, max: isPercent ? 100 : 10_000_000, required: true });
-  const currency = isPercent ? "CAD" : body.currency;
+  const currency = body.currency; // a % charge may be billed in CAD or USD too
   if (!CURRENCIES.includes(currency)) throw new HttpError(400, "Currency must be CAD or USD.");
 
   let capacity = null;

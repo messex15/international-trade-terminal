@@ -13,6 +13,8 @@ per-unit prices are in metric tonnes, shown as MT.
   Bank of Canada daily rate. Enter the final price for the customer to see
   the estimated earnings, or a warning when that price loses money.
 - Charges table: a USD charge shows its Per MT and Shipment amounts in USD.
+  That includes a % charge (of goods value or of the final price) billed in
+  USD: the percentage and its cost are the same, shown in USD.
   The column headings say (CAD) or (USD) when every charge is in that
   currency; when they are mixed, each amount is marked C$ or US$. Where a
   charge's currency differs from the quote summary's, the amount in the
@@ -63,14 +65,13 @@ per-unit prices are in metric tonnes, shown as MT.
 - Saved quotes: the server recomputes totals and keeps a copy of the rates
   used. Opening a saved quote re-checks it against today's rates.
 - Print / PDF: prints as a Costing Sheet on one page, as large as fits: up
-  to 25% larger than the screen for a typical quote, scaled down for a long
-  one, with the same margins either way. Hints for filling in the form are
-  not printed. The top of the page
-  shows "Your company name" from the quote (default International Trade
-  Terminal) and the time it was printed. New quotes keep the last name used
-  in that browser; saved quotes keep their own. The browser's own header and
-  footer (page title, web address, page numbers) are switched off while a
-  quote prints.
+  to 25% larger than full size for a short quote, scaled down for a long one.
+  Hints for filling in the form are not printed. The top of the page shows
+  "Your company name" from the quote (default International Trade Terminal)
+  and the time it was printed. New quotes keep the last name used in that
+  browser; saved quotes keep their own. The browser's own header and footer
+  (page title, web address, page numbers) are switched off while a quote
+  prints.
 
 WHO CAN USE IT
 /app/#Freight Desk   Staff. Sidebar > Operations > Freight Desk. Uses the

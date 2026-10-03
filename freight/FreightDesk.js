@@ -50,8 +50,10 @@ const pct = (v) => (Number.isFinite(v) ? `${v.toFixed(1)}%` : '');
 const pctSetting = (v) => (Number.isFinite(v) ? `${Number.isInteger(v) ? v : v.toFixed(1)}%` : '');
 
 function basisText(r) {
-  if (r.basis === 'percent_of_value') return 'of goods value';
-  if (r.basis === 'percent_of_sale') return 'of final price';
+  // A % has no currency of its own, so say which one it is billed in when USD.
+  const inUSD = r.currency === 'USD' ? ', in USD' : '';
+  if (r.basis === 'percent_of_value') return `of goods value${inUSD}`;
+  if (r.basis === 'percent_of_sale') return `of final price${inUSD}`;
   const basis = BASES[r.basis];
   const cap = basis?.needsCapacity && r.capacity_t ? `, ${tonnes(Number(r.capacity_t))}` : '';
   return `${basis?.label || ''}${cap}`;
@@ -773,7 +775,7 @@ function LineRow({ line, i, columnCurrency, summaryCurrency, usdcad, rates, setL
         isOther && field('chargeName', { placeholder: 'Name of charge', maxLength: 60, list: 'fd-charge-names', title: 'What the charge is, such as Fumigation or Bagging', 'aria-label': 'Name of other charge' }),
         field('description', { placeholder: line.standard ? 'Charged by (optional)' : isOther ? 'Charged by' : 'Charged by or what it is', maxLength: 120, 'aria-label': `${typeName} description` }),
         field('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: isPercent ? '%' : 'Amount', 'aria-label': `${typeName} amount` }),
-        h('select', { value: isPercent ? 'CAD' : line.currency, onChange: setLine(i, 'currency'), disabled: isPercent, 'aria-label': `${typeName} currency` }, h('option', null, 'CAD'), h('option', null, 'USD')),
+        h('select', { value: line.currency, onChange: setLine(i, 'currency'), 'aria-label': `${typeName} currency` }, h('option', null, 'CAD'), h('option', null, 'USD')),
         h('select', { value: line.basis, onChange: setLine(i, 'basis'), 'aria-label': `${typeName} billed` }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label))),
         needsCap && field('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: `MT ${BASES[line.basis].short}`, title: `Metric tonnes (MT) per ${BASES[line.basis].unit}`, 'aria-label': `${typeName} MT per unit` })),
       h('small', { className: 'fdNoPrint' }, note), units, flagList),
@@ -950,7 +952,7 @@ function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const body = { ...form, chargeName: form.type === 'other' ? form.chargeName : '', currency: BASES[form.basis]?.percent ? 'CAD' : form.currency };
+    const body = { ...form, chargeName: form.type === 'other' ? form.chargeName : '' };
     try {
       if (editing) {
         const { rate } = await api(`rates/${initial.id}`, { method: 'PUT', body });
@@ -989,7 +991,7 @@ function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
         h(Field, { label: 'Billed' }, h('select', { value: form.basis, onChange: set('basis') }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label)))),
         h(Field, { label: 'Amount' }, h('span', { className: 'fdCombo' },
           input('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', required: true }),
-          h('select', { value: form.currency, onChange: set('currency'), disabled: Boolean(BASES[form.basis]?.percent), 'aria-label': 'Currency' }, h('option', null, 'CAD'), h('option', null, 'USD')))),
+          h('select', { value: form.currency, onChange: set('currency'), 'aria-label': 'Currency' }, h('option', null, 'CAD'), h('option', null, 'USD')))),
         basis?.needsCapacity && h(Field, { label: `MT per ${basis.unit}`, hint: 'Metric tonnes it holds. Turns the rate into a cost per MT.' }, input('capacity_t', { type: 'number', inputMode: 'decimal', min: 0, step: 'any' })),
         // Keeps the dates on a row of their own in the two-column form.
         (7 + (form.type === 'other' ? 1 : 0) + (basis?.needsCapacity ? 1 : 0)) % 2 === 1 && h('span', { 'aria-hidden': true }),

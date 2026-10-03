@@ -239,9 +239,9 @@ test("a named Other charge shows its name in quote warnings", () => {
 
 // ---------------------------------------------------------------- charges in their own currency
 
-test("a USD charge is also given in USD; CAD and % charges are not", () => {
+test("a USD charge is also given in USD; a CAD charge is not", () => {
   const ocean = { rateId: null, type: "ocean", basis: "per_container", amount: 2850, currency: "USD", capacity_t: 25 };
-  const insurance = { rateId: null, type: "insurance", basis: "percent_of_value", amount: 0.3, currency: "USD" };
+  const insurance = { rateId: null, type: "insurance", basis: "percent_of_value", amount: 0.3, currency: "CAD" };
   const q = computeQuote(deal([loading, ocean, insurance], { usdcad: 1.4 }));
   const [l, o, ins] = q.lines;
   // 100 MT in 25 MT containers = 4 containers of US$2,850
@@ -249,8 +249,24 @@ test("a USD charge is also given in USD; CAD and % charges are not", () => {
   near(o.totalUSD, 4 * 2850);
   near(o.perTonneCAD, (4 * 2850 * 1.4) / 100);
   assert.equal(l.perTonneUSD, null);
-  assert.equal(ins.perTonneUSD, null, "a % charge is worked out in CAD");
+  assert.equal(ins.perTonneUSD, null);
   assert.deepEqual([l, o, ins].map(chargeCurrency), ["CAD", "USD", "CAD"]);
+});
+
+test("a % charge can be billed in USD: same cost, shown in USD", () => {
+  const insurance = (currency) => ({ rateId: null, type: "insurance", basis: "percent_of_value", amount: 0.5, currency });
+  const commission = (currency) => ({ rateId: null, type: "commission", basis: "percent_of_sale", amount: 2, currency });
+  const cad = computeQuote(deal([insurance("CAD"), commission("CAD")], { usdcad: 1.4, salePrice: 700, saleCurrency: "CAD" }));
+  const usd = computeQuote(deal([insurance("USD"), commission("USD")], { usdcad: 1.4, salePrice: 700, saleCurrency: "CAD" }));
+  // 0.5% of the 500 goods value and 2% of the 700 final price, whatever the currency
+  near(usd.lines[0].perTonneCAD, 2.5);
+  near(usd.lines[1].perTonneCAD, 14);
+  near(usd.landedPerTonneCAD, cad.landedPerTonneCAD);
+  near(usd.lines[0].perTonneUSD, 2.5 / 1.4);
+  near(usd.lines[1].totalUSD, (14 / 1.4) * 100);
+  assert.deepEqual(usd.lines.map(chargeCurrency), ["USD", "USD"]);
+  const noRate = computeQuote(deal([insurance("USD")]));
+  assert.ok(noRate.issues.some((i) => i.message === "Enter a USD to CAD exchange rate."), "a USD % charge needs the rate");
 });
 
 test("a USD charge without an exchange rate has no USD amount", () => {

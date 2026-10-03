@@ -197,6 +197,24 @@ await step("rates can be deleted for good", async () => {
   assert.equal((await req(`/api/freight/rates/${made.rate.id}`, { method: "DELETE", cookie: MEMBER })).status, 404);
 });
 
+await step("a % rate can be billed in USD, in rate memory and on a saved quote", async () => {
+  const rate = { type: "insurance", provider: `Marsh ${RUN}`, basis: "percent_of_value", amount: 0.3, currency: "USD", effectiveFrom: "2026-10-01" };
+  const made = await req("/api/freight/rates", { method: "POST", cookie: MEMBER, body: rate });
+  assert.equal(made.status, 201, await made.clone().text());
+  const saved = (await made.json()).rate;
+  assert.equal(saved.currency, "USD");
+  const body = { quantity_t: 100, quoteDate: "2026-10-02", purchasePrice: 500, purchaseCurrency: "CAD", usdcad: 1.4,
+    lines: [{ rateId: saved.id, ...rate }] };
+  const res = await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body });
+  assert.equal(res.status, 201, await res.clone().text());
+  const { quote } = await res.json();
+  assert.ok(Math.abs(quote.result.lines[0].perTonneCAD - 1.5) < 1e-9, "0.3% of the 500 goods value");
+  assert.ok(Math.abs(quote.result.lines[0].perTonneUSD - 1.5 / 1.4) < 1e-9);
+  assert.equal((await req("/api/freight/quotes", { method: "POST", cookie: MEMBER, body: { ...body, usdcad: "" } })).status, 400, "needs the exchange rate");
+  assert.equal((await req(`/api/freight/quotes/${quote.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+  assert.equal((await req(`/api/freight/rates/${saved.id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
+});
+
 await step("saved quotes are recomputed on the server and kept per workspace", async () => {
   const body = {
     companyName: "Prairie Pulse Traders", reference: `Q-E2E-${RUN}`, buyer: "PT Example", commodity: lane.commodity, quantity_t: 180, quoteDate: "2026-09-30",

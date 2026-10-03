@@ -137,11 +137,12 @@ export function fromCAD(cad, currency, usdcad) {
 }
 
 /**
- * The currency a charge is billed in. A % charge is worked out from CAD
- * amounts (goods value, final price), so it is in CAD whatever is picked.
+ * The currency a charge is billed in. A % charge (of goods value or of the
+ * final price) can be billed in either: the percentage is the same, and its
+ * amount is shown in that currency at the quote's exchange rate.
  */
 export function chargeCurrency(line) {
-  return line.currency === "USD" && !BASES[line.basis]?.percent ? "USD" : "CAD";
+  return line.currency === "USD" ? "USD" : "CAD";
 }
 
 /**
