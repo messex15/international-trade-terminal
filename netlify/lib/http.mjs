@@ -128,10 +128,10 @@ export async function requireWorkspace(req) {
   return { session, ws: await workspaceOf(session) };
 }
 
-/** Only portal members manage client links. */
-export async function requireMember(req) {
+/** Only portal members manage client links (and use the CN connection). */
+export async function requireMember(req, message = "Only signed-in portal members can manage client access.") {
   const member = await currentMember(req);
-  if (!member) throw new HttpError(403, "Only signed-in portal members can manage client access.");
+  if (!member) throw new HttpError(403, message);
   return member;
 }
 

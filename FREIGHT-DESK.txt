@@ -85,6 +85,25 @@ per-unit prices are in metric tonnes, shown as MT.
   (page title, web address, page numbers) are switched off while a quote
   prints.
 
+CN CONNECTION (staff only)
+Rate memory > CN connection. The desk talks to CN's API with the key and
+secret of an app on the CN account (OAuth client credentials, as CN's API
+overview describes). They are Netlify environment variables: used only by
+the server, never sent to the browser or saved with the data.
+Set up, once:
+1. Sign in to CN's developer portal (developer.app.cn.ca) with the CN
+   account. Create a team, then an app with the Rates API product.
+2. Wait for CN to confirm the app's access is activated.
+3. In Netlify: Site configuration > Environment variables. Add CN_API_KEY
+   (the app's key) and CN_API_SECRET (its secret), then redeploy.
+4. In the desk: Rate memory > CN connection > Test connection.
+What works now: the connection test (CN issues an access token).
+Next: bringing CN's rates into rate memory. CN shows the Rates API
+specification only to signed-in portal users, so it is built from that
+specification once it is downloaded from the portal (API Products > Rates >
+API spec).
+Code: netlify/lib/cn.mjs (token), netlify/functions/freight-cn.mjs.
+
 WHO CAN USE IT
 /app/#Freight Desk   Staff. Sidebar > Operations > Freight Desk. Uses the
                      existing Netlify Identity sign-in and the member role.
@@ -144,7 +163,7 @@ freight/access/                Where client links land (styled like /login)
 netlify/edge-functions/        Gate for /freight/* (members or client links)
 netlify/functions/             APIs under /api/freight/*
 netlify/lib/                   Sessions, Identity check, validation,
-                               customer lists
+                               customer lists, CN connection
 _redirects                     Now also hides server files from the public site
 
 LOCAL TESTING
@@ -153,7 +172,7 @@ LOCAL TESTING
     echo IDENTITY_API_URL=http://localhost:9999 >> .env
     node test/mock-identity.mjs        (prints a member token; leave running)
     npx netlify-cli dev                (second terminal)
-    npm test                           (math)
+    npm test                           (math, CN token flow)
     node test/e2e.mjs                  (end-to-end, third terminal)
 IDENTITY_API_URL points the site at a stand-in for Netlify Identity. Never
 set it in production.
@@ -165,3 +184,4 @@ SETTINGS WORTH REVIEWING
 - A rate counts as old after 30 days (staleDays in freight/calc.js).
 - FREIGHT_MEMBER_ROLE changes which Identity role counts as staff
   (default member, matching _redirects).
+- CN_API_KEY and CN_API_SECRET turn on the CN connection (see above).

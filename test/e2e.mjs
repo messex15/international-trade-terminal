@@ -323,6 +323,21 @@ await step("saving a quote for a new customer adds them to that workspace's cust
   assert.equal((await req(`/api/freight/customers/${added[0].id}`, { method: "DELETE", cookie: MEMBER })).status, 200);
 });
 
+await step("the CN connection is for portal members, and its key never reaches the browser", async () => {
+  const res = await req("/api/freight/cn", { cookie: MEMBER });
+  assert.equal(res.status, 200);
+  const status = await res.json();
+  assert.deepEqual(Object.keys(status), ["configured"], "only whether it is set up");
+  const lee = await clientSession("Lee CN", `CN Check Co ${RUN}`);
+  assert.equal((await req("/api/freight/cn?view=client", { cookie: lee.cookie })).status, 403, "client links cannot use it");
+  assert.equal((await req("/api/freight/cn/test", { method: "POST", cookie: MEMBER, body: {}, headers: { origin: "https://evil.example" } })).status, 403);
+  if (!status.configured) {
+    const test = await req("/api/freight/cn/test", { method: "POST", cookie: MEMBER, body: {} });
+    assert.equal(test.status, 503);
+    assert.match((await test.json()).error, /not set up/);
+  }
+});
+
 await step("customer lists: staff have one, each client company has its own", async () => {
   const name = `Zeta Foods ${RUN}`;
   const add = await req("/api/freight/customers", { method: "POST", cookie: MEMBER, body: { name, country: "Indonesia", deliveryTerms: "CFR Jakarta", email: "buyer@zeta.example" } });

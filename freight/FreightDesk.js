@@ -341,6 +341,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
   const [customers, setCustomers] = useState([]);
   const [customerEditor, setCustomerEditor] = useState(null);
   const [openCustomer, setOpenCustomer] = useState(null);
+  const [cnOpen, setCnOpen] = useState(false);
 
   const notify = useCallback((text, bad = false) => setToast({ text, bad, at: Date.now() }), []);
   useEffect(() => {
@@ -542,6 +543,8 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       h(Button, { key: 'new', kind: 'primary', icon: Plus, onClick: newQuote }, 'New quote'),
     ],
     rates: [
+      // The CN connection uses the staff's CN account, so only portal members see it.
+      canManageAccess && h(Button, { key: 'cn', icon: Link2, onClick: () => setCnOpen(true) }, 'CN connection'),
       h(Button, { key: 'csv', icon: Download, onClick: exportCsv, disabled: !rates.length }, 'Export CSV'),
       h(Button, { key: 'cap', kind: 'primary', icon: Plus, onClick: () => setRateEditor({}) }, 'Capture rate'),
     ],
@@ -622,6 +625,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       onEdit: () => { setOpenCustomer(null); setCustomerEditor({ customer: openCustomer }); },
       onOpenQuote: (q) => { setOpenCustomer(null); setOpenQuote(q); },
     }),
+    cnOpen && h(CnConnection, { api, onClose: () => setCnOpen(false) }),
     openQuote && h(QuoteDrawer, { summary: openQuote, onClose: () => setOpenQuote(null), onLoad: () => openSavedQuote(openQuote.id), onDelete: () => deleteSavedQuote(openQuote) }),
     h('datalist', { id: 'fd-charge-names' }, [...new Set(rates.filter((r) => r.type === 'other').map((r) => String(r.chargeName || '').trim()).filter(Boolean))].sort().map((n) => h('option', { key: n, value: n }))),
     h('datalist', { id: 'fd-rail-destinations' }, [...new Set(rates.filter((r) => r.type === 'rail' && String(r.destination || '').trim()).map((r) => r.destination.trim()))].sort().map((d) => h('option', { key: d, value: d }))),
@@ -1280,6 +1284,58 @@ function CustomerEditor({ initial, api, onClose, onSaved, onDeleted }) {
 const LINK_STATUS = { 'In use': 'badge good', 'Not opened yet': 'badge', Expired: 'badge warn', Revoked: 'badge bad' };
 const isFinishedLink = (l) => l.status === 'Revoked' || l.status === 'Expired';
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+
+// ------------------------------------------------------------------ CN connection
+
+const CN_STATUS = {
+  loading: ['badge', 'Checking…'],
+  missing: ['badge warn', 'Not set up'],
+  ready: ['badge', 'Set up, not tested'],
+  testing: ['badge', 'Testing…'],
+  ok: ['badge good', 'Connected'],
+  failed: ['badge bad', 'Not connected'],
+  error: ['badge bad', 'Could not check'],
+};
+
+/**
+ * Whether the CN API connection is set up, and a test that asks CN for an
+ * access token. The key and secret are Netlify settings and stay on the server.
+ */
+function CnConnection({ api, onClose }) {
+  const [status, setStatus] = useState({ state: 'loading' });
+  useEffect(() => {
+    api('cn').then((d) => setStatus({ state: d.configured ? 'ready' : 'missing' }))
+      .catch((err) => setStatus({ state: 'error', message: err.message }));
+  }, [api]);
+  async function test() {
+    setStatus({ state: 'testing' });
+    try {
+      const d = await api('cn/test', { method: 'POST', body: {} });
+      setStatus({ state: 'ok', at: d.checkedAt });
+    } catch (err) {
+      setStatus({ state: 'failed', message: err.message });
+    }
+  }
+  const [cls, text] = CN_STATUS[status.state];
+  const canTest = ['ready', 'ok', 'failed'].includes(status.state);
+  return h(Overlay, { centered: true, onClose },
+    h('div', { className: 'modal fd', role: 'dialog', 'aria-label': 'CN connection' },
+      h(PanelHead, { kicker: 'Rate memory', title: 'CN connection', onClose }),
+      h('div', { className: 'fdCnBody' },
+        h('p', null, h('span', { className: cls }, text)),
+        h('p', null, 'Connects the desk to CN\'s API with the API key and secret of an app on the CN account. They are kept on the server and never shown here. For now this checks that CN accepts them; bringing CN\'s rates into rate memory is the next step.'),
+        status.state === 'missing' && h(React.Fragment, null,
+          h('p', null, h('b', null, 'To set it up (once, by whoever manages the site):')),
+          h('ol', { className: 'fdSteps' },
+            h('li', null, 'Sign in to CN\'s developer portal, developer.app.cn.ca, with the CN account. Create a team, then an app with the Rates API.'),
+            h('li', null, 'Wait for CN to confirm the app\'s access is activated.'),
+            h('li', null, 'In Netlify, under Site configuration, Environment variables, add CN_API_KEY (the app\'s key) and CN_API_SECRET (its secret). Then redeploy the site.'))),
+        status.state === 'ok' && h('p', null, `Checked ${when(status.at)}: CN accepted the key and secret.`),
+        (status.state === 'failed' || status.state === 'error') && h('div', { className: 'modalNote fdError', role: 'alert' }, status.message)),
+      h('div', { className: 'modalActions' },
+        h('button', { type: 'button', className: 'secondary', onClick: onClose }, 'Close'),
+        h('button', { type: 'button', className: 'primary', onClick: test, disabled: !canTest }, h(RefreshCw, { size: 15 }), status.state === 'testing' ? 'Testing…' : 'Test connection'))));
+}
 
 function AccessView({ api, notify }) {
   const [links, setLinks] = useState(null);

@@ -112,6 +112,11 @@
 .fd .fdHistory>button.fdQuoteRow:hover{background:#f7fafc}
 .fd .fdHistory>button.fdQuoteRow:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
 .fdCustomerQuotes{margin-top:12px}
+.fdCnBody{padding:4px 18px 6px;font-size:11px;color:#3f5266;line-height:1.55}
+.fdCnBody p{margin:0 0 10px}
+.fdSteps{margin:0 0 10px;padding-left:18px}
+.fdSteps li{margin-bottom:6px}
+.fdCnBody .modalNote{margin:0 0 10px}
 .fdPickerNote{margin:0;padding:8px 18px;font-size:10px;color:#5d6f82;background:#f7fafc;border-bottom:1px solid var(--line)}
 .fdCustomerQuotes .fdHolds{margin:8px 0 0;padding:0}
 .fd .drawerBody>.fdHolds{margin:0 0 4px}
