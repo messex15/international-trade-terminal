@@ -41,7 +41,7 @@ function validateRate(body) {
   if (body.type === "other" && !chargeName) throw new HttpError(400, "Say what the other charge is, such as Fumigation or Bagging.");
   if (!BASES[body.basis]) throw new HttpError(400, "Choose how the charge is billed.");
   const provider = cleanText(body.provider, 80);
-  if (!provider) throw new HttpError(400, "Enter who is charging this (carrier, elevator, terminal).");
+  if (!provider) throw new HttpError(400, "Enter the provider (railway, elevator, terminal).");
 
   const isPercent = Boolean(BASES[body.basis].percent);
   const amount = cleanNumber(body.amount, "Amount", { min: 0, max: isPercent ? 100 : 10_000_000, required: true });

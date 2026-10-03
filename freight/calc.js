@@ -33,7 +33,18 @@ export const BASES = {
 const isBlank = (value) => value === "" || value === null || value === undefined;
 
 /**
- * Every quote starts with a few standard rows (transloading, ocean freight,
+ * Whether two places are the same destination, by the place name before any
+ * comma, ignoring case and spacing: "Vancouver" matches "Vancouver, BC".
+ * The rail destination decides the railway (CN or CPKC), so a rail rate to
+ * another destination is flagged on the quote.
+ */
+export function sameDestination(a, b) {
+  const place = (v) => String(v ?? "").split(",")[0].trim().toLowerCase().replace(/\s+/g, " ");
+  return Boolean(place(a)) && place(a) === place(b);
+}
+
+/**
+ * Every quote starts with a few standard rows (transloading, labour charges,
  * insurance, commission). A standard row left without an amount is not part
  * of the quote: no cost, no warnings, not printed.
  */
@@ -282,6 +293,9 @@ export function computeQuote(q, { today = isoToday(), staleDays = 30 } = {}) {
         : { perTonne: (referencePrice * cost.salePct) / 100, atPrice: saleBasedAt };
     }
     const flags = rateFlags(line, quoteDate, staleDays);
+    if (line.type === "rail" && !isBlank(q.railDestination) && !isBlank(line.destination) && !sameDestination(line.destination, q.railDestination)) {
+      flags.push({ level: "warning", code: "destination", message: `Goes to ${line.destination}, not the rail destination (${String(q.railDestination).trim()}).` });
+    }
     if (cost.error) flags.push({ level: "error", code: "input", message: cost.error });
     const perTonne = cost.perTonne ?? null;
     // A USD charge is also given in USD, at the quote's exchange rate.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chargeCurrency, chargeLabel, computeQuote, fromCAD, groupLanes, laneKey, lineCost, lineName, percentChange } from "../freight/calc.js";
+import { chargeCurrency, chargeLabel, computeQuote, fromCAD, groupLanes, laneKey, lineCost, lineName, percentChange, sameDestination } from "../freight/calc.js";
 
 const near = (actual, expected, eps = 1e-6) => assert.ok(Math.abs(actual - expected) < eps, `${actual} != ${expected}`);
 
@@ -309,4 +309,27 @@ test("a summary in USD needs an exchange rate", () => {
   const q = computeQuote(deal([loading], { summaryCurrency: "USD" }));
   assert.ok(q.issues.some((i) => i.message === "Enter a USD to CAD exchange rate."));
   assert.equal(computeQuote(deal([loading], { summaryCurrency: "USD", usdcad: 1.4 })).hasInputErrors, false);
+});
+
+// ---------------------------------------------------------------- rail destination
+
+test("places match by name, ignoring the province, case and spacing", () => {
+  assert.equal(sameDestination("Vancouver, BC", "vancouver"), true);
+  assert.equal(sameDestination("  Prince  Rupert ,BC", "Prince Rupert, B.C."), true);
+  assert.equal(sameDestination("Thunder Bay, ON", "Vancouver, BC"), false);
+  assert.equal(sameDestination("", ""), false);
+});
+
+test("a rail rate to another destination is flagged", () => {
+  const rail = (destination) => ({ rateId: "r1", type: "rail", provider: "CPKC", origin: "Saskatoon, SK", destination, basis: "per_tonne", amount: 60, currency: "CAD", effectiveFrom: "2026-09-20" });
+  const flagged = (q) => q.lines[0].flags.filter((f) => f.code === "destination");
+  const wrong = computeQuote(deal([rail("Thunder Bay, ON")], { railDestination: "Vancouver" }));
+  assert.equal(flagged(wrong).length, 1);
+  assert.match(flagged(wrong)[0].message, /Goes to Thunder Bay, ON, not the rail destination \(Vancouver\)/);
+  assert.ok(wrong.issues.some((i) => i.code === "destination" && i.level === "warning"));
+  assert.equal(wrong.hasInputErrors, false, "a warning, not a blocker");
+  assert.equal(flagged(computeQuote(deal([rail("Vancouver, BC")], { railDestination: "Vancouver" }))).length, 0);
+  assert.equal(flagged(computeQuote(deal([rail("Thunder Bay, ON")]))).length, 0, "no rail destination, nothing to check");
+  const port = { ...rail("Thunder Bay, ON"), type: "port" };
+  assert.equal(flagged(computeQuote(deal([port], { railDestination: "Vancouver" }))).length, 0, "only rail charges are checked");
 });

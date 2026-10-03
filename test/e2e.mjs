@@ -240,10 +240,10 @@ await step("grade, customer, standard rows and a commission on the final price a
   const body = {
     reference: `Q-STD-${RUN}`, buyer: "PT Example", commodity: "Yellow peas", grade: "No. 2 or better", quantity_t: 100, quoteDate: "2026-10-02",
     purchasePrice: 500, purchaseCurrency: "CAD", targetMarginPct: 8, minMarginPct: 4, salePrice: 600, saleCurrency: "CAD",
+    railDestination: "Vancouver, BC",
     lines: [
       { ...blank("transload", "per_tonne"), amount: 20 },
       blank("labour", "per_tonne"),
-      blank("ocean", "per_container", "USD"),
       blank("insurance", "percent_of_value"),
       { ...blank("commission", "percent_of_sale"), amount: 2 },
     ],
@@ -252,7 +252,8 @@ await step("grade, customer, standard rows and a commission on the final price a
   assert.equal(res.status, 201, await res.clone().text());
   const { quote } = await res.json();
   assert.equal(quote.inputs.grade, "No. 2 or better");
-  assert.equal(quote.inputs.lines.filter((l) => l.standard).length, 5, "blank standard rows are kept with the quote");
+  assert.equal(quote.inputs.lines.filter((l) => l.standard).length, 4, "blank standard rows are kept with the quote");
+  assert.equal(quote.inputs.railDestination, "Vancouver, BC", "the rail destination is kept with the quote");
   assert.ok(Math.abs(quote.result.landedPerTonneCAD - 532) < 1e-9, "2% commission on the 600 final price");
   assert.ok(Math.abs(quote.result.final.earningsTotalCAD - 6800) < 1e-9, "estimated earnings");
   assert.equal(quote.inputs.targetMarginPct, 8, "margins are kept with the quote");

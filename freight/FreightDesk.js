@@ -11,7 +11,7 @@ import {
   Link2, PackageSearch, PencilLine, Plus, Printer, RefreshCw, Search, Ship, Trash2, TriangleAlert, Users, X,
 } from 'lucide-react';
 import {
-  BASES, RATE_TYPES, chargeCurrency, chargeLabel, compareRatesNewestFirst, computeQuote, daysBetween, formatDate, fromCAD,
+  BASES, RATE_TYPES, chargeCurrency, chargeLabel, compareRatesNewestFirst, computeQuote, daysBetween, formatDate, fromCAD, sameDestination,
   groupLanes, isUnusedLine, isoToday, laneKey, percentChange,
 } from './calc.js';
 
@@ -95,10 +95,10 @@ const DEFAULT_BASIS = {
 // Every quote has these rows ready to fill in. Left blank, a row is not part of
 // the quote (no cost, not printed). Adding a rate of the same type from rate
 // memory takes over the blank row.
+// (Ocean freight is not one: it is a separate service from what the desk covers.)
 const STANDARD_LINES = [
   { type: 'transload', currency: 'CAD' },
   { type: 'labour', currency: 'CAD' },
-  { type: 'ocean', currency: 'USD' },
   { type: 'insurance', currency: 'CAD' },
   { type: 'commission', currency: 'CAD' },
 ];
@@ -109,7 +109,10 @@ function standardLine({ type, currency }) {
 // A missing row goes in its standard place: before the next standard charge the
 // quote already has (so Labour charges lands after Transloading on older quotes).
 function withStandardLines(lines = []) {
-  const out = [...lines];
+  // A blank row for a charge that is no longer standard (Ocean freight on older
+  // quotes) is dropped; a filled one stays.
+  const standardTypes = STANDARD_LINES.map((s) => s.type);
+  const out = lines.filter((l) => !(isUnusedLine(l) && !standardTypes.includes(l.type)));
   STANDARD_LINES.forEach((s, k) => {
     if (out.some((l) => l.type === s.type)) return;
     const later = STANDARD_LINES.slice(k + 1).map((x) => x.type);
@@ -312,7 +315,7 @@ const TABS = [
 ];
 const SUBTITLES = {
   quote: 'Price a shipment from real freight costs. Flags expired, old or replaced rates before a quote goes out.',
-  rates: 'Every rail tariff, loading charge and carrier offer, captured as it arrives and kept with its history.',
+  rates: 'Every rail tariff, loading charge and other 3rd party provider rate, captured as it arrives and kept with its history.',
   quotes: 'Each saved quote keeps a copy of the rates it was built on, so later changes are easy to spot.',
   customers: 'Your customers and their usual delivery terms, ready to pick on a quote.',
   access: 'Give a client single-use access to the Freight Desk without a portal account.',
@@ -621,6 +624,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     }),
     openQuote && h(QuoteDrawer, { summary: openQuote, onClose: () => setOpenQuote(null), onLoad: () => openSavedQuote(openQuote.id), onDelete: () => deleteSavedQuote(openQuote) }),
     h('datalist', { id: 'fd-charge-names' }, [...new Set(rates.filter((r) => r.type === 'other').map((r) => String(r.chargeName || '').trim()).filter(Boolean))].sort().map((n) => h('option', { key: n, value: n }))),
+    h('datalist', { id: 'fd-rail-destinations' }, [...new Set(rates.filter((r) => r.type === 'rail' && String(r.destination || '').trim()).map((r) => r.destination.trim()))].sort().map((d) => h('option', { key: d, value: d }))),
     h('datalist', { id: 'fd-commodities' }, [...new Set([...COMMODITIES, ...rates.map((r) => r.commodity).filter(Boolean)])].map((c) => h('option', { key: c, value: c }))),
     toast && h('div', { className: `toast${toast.bad ? ' fdToastBad' : ''}`, role: 'status', key: toast.at }, toast.text)));
 }
@@ -694,6 +698,10 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
           h(Field, { label: 'Quantity (MT)' }, num('quantity_t')),
           h(Field, { label: optionalLabel('Delivery terms'), className: printIfFilled(quote.destination) },
             input('destination', { maxLength: 80, placeholder: 'CFR Manila' })),
+          h(Field, {
+            label: optionalLabel('Rail destination'), className: printIfFilled(quote.railDestination), screenHint: true,
+            hint: 'Where the rail leg ends, which decides CN or CPKC. Rail rates going there are listed first.',
+          }, input('railDestination', { maxLength: 80, list: 'fd-rail-destinations', placeholder: 'Vancouver, BC' })),
           h(Field, { label: 'Quote date' }, input('quoteDate', { type: 'date' })))),
       h('section', { className: 'card' },
         h('div', { className: 'cardTitle' }, h('h3', null, 'Price and margin')),
@@ -715,7 +723,7 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
             h('table', { className: 'fdStatic' },
               h('thead', null, h('tr', null, h('th', null, 'Charge'), h('th', null, 'Rate'), h('th', { className: 'fdNum' }, columnHead('Per MT')), h('th', { className: 'fdNum' }, columnHead('Shipment')), h('th', { className: 'fdNoPrint' }, h('span', { className: 'fdSr' }, 'Remove')))),
               h('tbody', null, result.lines.map((line, i) => h(LineRow, { key: i, line, i, columnCurrency, summaryCurrency, usdcad: result.usdcad, rates, setLine, removeLine, useNewer })))))
-          : h(Empty, { label: 'No charges yet. Add rail, loading, port and ocean charges from rate memory.' }),
+          : h(Empty, { label: 'No charges yet. Add rail, loading and port charges from rate memory.' }),
         h('div', { className: 'fdCardFoot' },
           h(Button, { kind: 'primary', icon: Plus, onClick: onPick }, 'Add from rate memory'),
           h(Button, { icon: PencilLine, onClick: () => setQuote((q) => ({ ...q, lines: [...q.lines, oneOffLine()] })) }, 'Add a one-off charge')))),
@@ -784,7 +792,7 @@ function LineRow({ line, i, columnCurrency, summaryCurrency, usdcad, rates, setL
           ? h('span', { className: 'fdLineType' }, typeName)
           : h('select', { value: line.type, onChange: setLine(i, 'type'), 'aria-label': 'Charge type' }, Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v))),
         isOther && field('chargeName', { placeholder: 'Name of charge', maxLength: 60, list: 'fd-charge-names', title: 'What the charge is, such as Fumigation or Bagging', 'aria-label': 'Name of other charge' }),
-        field('description', { placeholder: line.standard ? 'Charged by (optional)' : isOther ? 'Charged by' : 'Charged by or what it is', maxLength: 120, 'aria-label': `${typeName} description` }),
+        field('description', { placeholder: line.standard ? 'Provider (optional)' : isOther ? 'Provider' : 'Provider or what it is', maxLength: 120, 'aria-label': `${typeName} description` }),
         field('amount', { type: 'number', inputMode: 'decimal', min: 0, step: 'any', placeholder: isPercent ? '%' : 'Amount', 'aria-label': `${typeName} amount` }),
         h('select', { value: line.currency, onChange: setLine(i, 'currency'), 'aria-label': `${typeName} currency` }, h('option', null, 'CAD'), h('option', null, 'USD')),
         h('select', { value: line.basis, onChange: setLine(i, 'basis'), 'aria-label': `${typeName} billed` }, Object.entries(BASES).map(([k, v]) => h('option', { key: k, value: k }, v.label))),
@@ -909,7 +917,7 @@ function RatesView({ lanes, onOpen, onCapture }) {
   return h('section', { className: 'card dataCard' },
     h('div', { className: 'toolbar' },
       h('div', { className: 'pageSearch' }, h(Search, { size: 15 }),
-        h('input', { 'aria-label': 'Search rates', placeholder: 'Search carrier, place, commodity or source...', value: query, onChange: (e) => setQuery(e.target.value) })),
+        h('input', { 'aria-label': 'Search rates', placeholder: 'Search provider, place, commodity or source...', value: query, onChange: (e) => setQuery(e.target.value) })),
       h('label', { className: 'filterSelect' }, h(Filter, { size: 15 }),
         h('select', { value: type, onChange: (e) => setType(e.target.value), 'aria-label': 'Charge type' },
           h('option', { value: 'All' }, 'All charge types'), Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v)))),
@@ -920,7 +928,7 @@ function RatesView({ lanes, onOpen, onCapture }) {
     visible.length
       ? h('div', { className: 'tableWrap' },
         h('table', null,
-          h('thead', null, h('tr', null, ['Charged by', 'Route', 'Commodity', 'Rate', 'Change', 'Effective', 'Valid until', 'Source'].map((c) => h('th', { key: c, className: c === 'Rate' || c === 'Change' ? 'fdNum' : undefined }, c)))),
+          h('thead', null, h('tr', null, ['Provider', 'Route', 'Commodity', 'Rate', 'Change', 'Effective', 'Valid until', 'Source'].map((c) => h('th', { key: c, className: c === 'Rate' || c === 'Change' ? 'fdNum' : undefined }, c)))),
           h('tbody', null, visible.map((lane) => {
             const r = lane.latest;
             const earlier = lane.history.length - 1;
@@ -1023,7 +1031,7 @@ function RateEditor({ initial, api, onClose, onSaved, providers, places }) {
         h(Field, { label: 'Charge type' }, h('select', { value: form.type, onChange: set('type'), autoFocus: true }, Object.entries(RATE_TYPES).map(([k, v]) => h('option', { key: k, value: k }, v)))),
         form.type === 'other' && h(Field, { label: 'Name of charge', hint: 'What it is, so it is easy to find and reuse.' },
           input('chargeName', { list: 'fd-charge-names', maxLength: 60, required: true, placeholder: 'Fumigation, bagging, demurrage' })),
-        h(Field, { label: 'Charged by' }, input('provider', { list: 'fd-providers', maxLength: 80, placeholder: 'CN, Viterra, COSCO', required: true })),
+        h(Field, { label: 'Provider', hint: 'The 3rd party charging it: railway, elevator, terminal.' }, input('provider', { list: 'fd-providers', maxLength: 80, placeholder: 'CN, CPKC, Viterra', required: true })),
         h(Field, { label: 'From' }, input('origin', { list: 'fd-places', maxLength: 80, placeholder: 'Shaunavon, SK' })),
         h(Field, { label: 'To' }, input('destination', { list: 'fd-places', maxLength: 80, placeholder: 'Vancouver, BC' })),
         h(Field, { label: 'Commodity', hint: 'Blank if it applies to any commodity.' }, input('commodity', { list: 'fd-commodities', maxLength: 60 })),
@@ -1052,10 +1060,13 @@ function RatePicker({ lanes, quote, onAdd, onClose }) {
   const [scope, setScope] = useState('match');
   const commodity = (quote.commodity || '').trim().toLowerCase();
   const inQuote = new Set(quote.lines.map((l) => l.rateId).filter(Boolean));
+  // The rail destination decides the railway: rail rates going there come first.
+  const railTo = String(quote.railDestination || '').trim();
+  const toRailDestination = (r) => Boolean(railTo) && r.type === 'rail' && sameDestination(r.destination, railTo);
   const rows = lanes.map((l) => l.latest)
     .filter((r) => scope === 'all' || !commodity || !r.commodity || r.commodity.toLowerCase() === commodity)
     .filter((r) => !query.trim() || [chargeLabel(r), RATE_TYPES[r.type], r.provider, r.origin, r.destination, r.commodity].join(' ').toLowerCase().includes(query.trim().toLowerCase()))
-    .sort((a, b) => a.type.localeCompare(b.type) || a.provider.localeCompare(b.provider));
+    .sort((a, b) => Number(toRailDestination(b)) - Number(toRailDestination(a)) || a.type.localeCompare(b.type) || a.provider.localeCompare(b.provider));
 
   let empty = 'Rate memory is empty. Capture rates under Rate memory first.';
   if (lanes.length) empty = commodity && scope !== 'all' ? `No rates for ${quote.commodity}. Show all commodities, or capture one under Rate memory.` : 'No rates match that search.';
@@ -1065,17 +1076,20 @@ function RatePicker({ lanes, quote, onAdd, onClose }) {
       h(PanelHead, { kicker: 'Rate memory', title: 'Add charges to the quote', onClose }),
       h('div', { className: 'toolbar' },
         h('div', { className: 'pageSearch' }, h(Search, { size: 15 }),
-          h('input', { autoFocus: true, 'aria-label': 'Search rates', placeholder: 'Search carrier, place or charge type...', value: query, onChange: (e) => setQuery(e.target.value) })),
+          h('input', { autoFocus: true, 'aria-label': 'Search rates', placeholder: 'Search provider, place or charge type...', value: query, onChange: (e) => setQuery(e.target.value) })),
         commodity && h('label', { className: 'filterSelect' }, h(Filter, { size: 15 }),
           h('select', { value: scope, onChange: (e) => setScope(e.target.value), 'aria-label': 'Commodity filter' },
             h('option', { value: 'match' }, `${quote.commodity} and any`), h('option', { value: 'all' }, 'All commodities')))),
+      railTo && h('p', { className: 'fdPickerNote' }, rows.some(toRailDestination)
+        ? `Rail rates to ${railTo}, the quote's rail destination, are listed first.`
+        : `No rail rates to ${railTo} yet. Capture one under Rate memory, or check the quote's rail destination.`),
       rows.length
         ? h('div', { className: 'tableWrap' },
           h('table', { className: 'fdStatic' },
-            h('thead', null, h('tr', null, ['Charged by', 'Route', 'Commodity', 'Rate', 'Valid until', ''].map((c, k) => h('th', { key: k, className: c === 'Rate' ? 'fdNum' : undefined }, c)))),
+            h('thead', null, h('tr', null, ['Provider', 'Route', 'Commodity', 'Rate', 'Valid until', ''].map((c, k) => h('th', { key: k, className: c === 'Rate' ? 'fdNum' : undefined }, c)))),
             h('tbody', null, rows.map((r) => h('tr', { key: r.id },
               h('td', null, h('b', null, r.provider), h('small', null, chargeLabel(r))),
-              h('td', null, routeText(r)),
+              h('td', null, routeText(r), toRailDestination(r) && h('small', null, h('span', { className: 'badge good' }, 'Rail destination'))),
               h('td', null, r.commodity || 'Any'),
               h('td', { className: 'fdNum' }, h('b', null, amountText(r)), h('small', null, basisText(r))),
               h('td', null, h(Validity, { validUntil: r.validUntil })),

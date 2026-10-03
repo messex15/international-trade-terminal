@@ -37,7 +37,7 @@ function cleanLine(line, i) {
   if (!BASES[line.basis]) throw new HttpError(400, `${at}: choose how it is billed.`);
   return {
     rateId: cleanText(line.rateId, 40) || null,
-    // A standard row (transloading, ocean, insurance, commission) may be left
+    // A standard row (transloading, labour, insurance, commission) may be left
     // blank; it is then not part of the quote.
     standard: line.standard === true,
     type: line.type,
@@ -68,6 +68,7 @@ function cleanInputs(body) {
     commodity: cleanText(body.commodity, 60),
     grade: cleanText(body.grade, 60),
     destination: cleanText(body.destination, 80),
+    railDestination: cleanText(body.railDestination, 80),
     incoterm: cleanText(body.incoterm, 20),
     quantity_t: cleanNumber(body.quantity_t, "Quantity", { min: 0, max: 10_000_000 }),
     quoteDate: cleanDate(body.quoteDate, "Quote date", { required: true }),

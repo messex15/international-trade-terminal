@@ -112,6 +112,7 @@
 .fd .fdHistory>button.fdQuoteRow:hover{background:#f7fafc}
 .fd .fdHistory>button.fdQuoteRow:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
 .fdCustomerQuotes{margin-top:12px}
+.fdPickerNote{margin:0;padding:8px 18px;font-size:10px;color:#5d6f82;background:#f7fafc;border-bottom:1px solid var(--line)}
 .fdCustomerQuotes .fdHolds{margin:8px 0 0;padding:0}
 .fd .drawerBody>.fdHolds{margin:0 0 4px}
 .fdHistoryEnd{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:10px;white-space:nowrap}
