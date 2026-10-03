@@ -168,7 +168,9 @@ body.fdPrinting .fdNoPrint{display:none!important}
 body.fdPrinting .sidebar,body.fdPrinting .topbar,body.fdPrinting .demoStrip,body.fdPrinting .scrim,body.fdPrinting .fdBar,body.fdPrinting .fdTabs,body.fdPrinting .headActions,body.fdPrinting .fdCardFoot,body.fdPrinting .fdSummaryActions,body.fdPrinting .toast,body.fdPrinting .fd .iconButton{display:none!important}
 body.fdPrinting .mainArea{margin-left:0!important}
 body.fdPrinting .contentArea{padding:0!important;max-width:none}
-body.fdPrinting .fdCalc{grid-template-columns:1fr 300px}
+/* Columns in proportion (about 315px for the summary at full size), so a sheet
+   laid out narrower to print larger keeps the same shape. */
+body.fdPrinting .fdCalc{grid-template-columns:minmax(0,1fr) minmax(0,.85fr)}
 /* Paper cannot scroll sideways: the charges table gets the full page width below
    the Deal, Price and summary cards, and wraps instead of being cut off. */
 body.fdPrinting .fdCalcMain{display:contents}
@@ -184,9 +186,24 @@ body.fdPrinting .fd .dataCard,body.fdPrinting .fd .tableWrap{overflow:visible}
 body.fdPrinting .fd table{min-width:0}
 body.fdPrinting .fd tr{break-inside:avoid}
 /* Tighter rows on paper, so a long quote needs less shrinking to fit the page. */
-body.fdPrinting .fd .tableWrap td{padding-top:6px;padding-bottom:6px}
+body.fdPrinting .fd .tableWrap td{padding-top:5px;padding-bottom:5px}
+/* Text wraps rather than pushing the table past the page edge; amounts do not. */
+body.fdPrinting .fd .tableWrap td:not(.fdNum){white-space:normal}
+body.fdPrinting .fd .tableWrap td.fdWrap{min-width:0}
+body.fdPrinting .fd .tableWrap th{padding-top:7px;padding-bottom:7px}
 body.fdPrinting .fdSummary{position:static}
 body.fdPrinting .card{box-shadow:none}
 body.fdPrinting .fd input,body.fdPrinting .fd select{border:0;background:transparent;padding-left:0}
+/* Without their boxes, fields need little room around the value. */
+body.fdPrinting .fd .formGrid input,body.fdPrinting .fd .formGrid select{margin-top:3px;padding-top:2px;padding-bottom:2px}
+/* Paper is denser than the screen, so the sheet can print larger (PAGE_FIT). */
+body.fdPrinting .fd .formGrid{padding:4px 17px 12px;row-gap:9px}
+body.fdPrinting .fd .cardTitle{padding-top:12px;padding-bottom:4px}
+body.fdPrinting .fd .card{margin-top:10px}
+body.fdPrinting .fd .pageHead{margin-bottom:10px}
+body.fdPrinting .fdPrintHead{margin-bottom:10px}
+body.fdPrinting .fdRow{padding:5px 0}
+body.fdPrinting .fdFinalTitle{padding-top:8px}
+body.fdPrinting .fdFine{margin-top:8px;margin-bottom:12px}
 /* Example text in an empty box is not a value, so it is not printed. */
 body.fdPrinting .fd input::placeholder,body.fdPrinting .fd textarea::placeholder{color:transparent}

@@ -123,8 +123,44 @@ const COMMODITIES = ['Yellow peas', 'Green peas', 'Red lentils', 'Green lentils'
 const DEFAULT_COMPANY = 'International Trade Terminal';
 // The printed costing sheet is fitted into this box (CSS px at 96 per inch):
 // A4's width (210 mm) and Letter's height (11 in, 1056 px) less a little slack
-// for rounding, so it is one page on either paper.
-const PAGE_FIT = { width: 794, height: 1048 };
+// for rounding, so it is one page on either paper. Its margins (mm) match the
+// print padding in freight.css.
+const PAGE_FIT = { width: 794, height: 1048, maxScale: 1.25, margin: { top: 12, side: 12, bottom: 10 } };
+
+/**
+ * Sizes the printed costing sheet to fill one page. Bigger type is tried first:
+ * the sheet is laid out narrower and scaled up to the page width, the largest
+ * size (up to maxScale) that still fits the page height. A sheet too long even
+ * at full size is scaled down instead. A transform scales it exactly as laid
+ * out (zoom re-flows text and comes out taller on paper), and the wrapper, cut
+ * to the scaled height, stops the browser from carrying the rest onto more pages.
+ */
+function fitSheetToPage(fit, sheet) {
+  const layOut = (scale) => {
+    const m = PAGE_FIT.margin;
+    // Narrower by the scale, with margins that come out the same on paper.
+    sheet.style.width = `${PAGE_FIT.width / scale}px`;
+    sheet.style.padding = `${m.top / scale}mm ${m.side / scale}mm ${m.bottom / scale}mm`;
+    return sheet.getBoundingClientRect().height;
+  };
+  // Fits: no taller than the page, and nothing pushed out sideways.
+  const fits = (scale) => layOut(scale) * scale <= PAGE_FIT.height && sheet.scrollWidth <= sheet.clientWidth + 1;
+  const step = (value, by) => Math.round((value + by) * 100) / 100;
+  // The largest scale that fits, from maxScale down to 1: in steps of 0.05,
+  // then of 0.01 short of the step that did not fit.
+  let scale = 1;
+  for (let s = PAGE_FIT.maxScale; s > 1; s = step(s, -0.05)) if (fits(s)) { scale = s; break; }
+  for (let s = Math.min(PAGE_FIT.maxScale, step(scale, 0.04)); s > scale; s = step(s, -0.01)) if (fits(s)) { scale = s; break; }
+  const height = layOut(scale);
+  if (height * scale > PAGE_FIT.height) scale = PAGE_FIT.height / height; // too long even at full size: shrink
+  if (scale !== 1) {
+    sheet.style.transformOrigin = 'top center';
+    sheet.style.transform = `scale(${scale})`;
+    fit.style.height = `${Math.floor(height * scale)}px`;
+    fit.style.overflow = 'hidden';
+  }
+  return scale;
+}
 
 function blankQuote() {
   return {
@@ -234,8 +270,9 @@ function useEscape(onClose) {
 function Empty({ label }) {
   return h('div', { className: 'emptyState' }, h(PackageSearch, { size: 22 }), h('span', null, label));
 }
-function Field({ label, hint, className, children }) {
-  return h('label', { className }, label, children, hint && h('span', { className: 'fdHint' }, hint));
+// screenHint: a hint that only helps someone filling in the field, so it is not printed.
+function Field({ label, hint, screenHint, className, children }) {
+  return h('label', { className }, label, children, hint && h('span', { className: screenHint ? 'fdHint fdNoPrint' : 'fdHint' }, hint));
 }
 /** Label for an optional field; "(optional)" is not printed. */
 function optionalLabel(text) {
@@ -400,23 +437,10 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
     const savedTitle = document.title;
     document.title = printJob.title;
     document.body.classList.add('fdPrinting');
-    // One page: lay the sheet out at paper width and, if it is taller than a
-    // page, scale it down. A transform shrinks it exactly as laid out (zoom
-    // re-flows text and comes out taller on paper), and the wrapper, cut to the
-    // scaled height, stops the browser from carrying the rest onto more pages.
+    // One page, as large as fits (see fitSheetToPage).
     const fit = fitRef.current;
     const sheet = rootRef.current;
-    if (fit && sheet) {
-      sheet.style.width = `${PAGE_FIT.width}px`;
-      const height = sheet.getBoundingClientRect().height;
-      if (height > PAGE_FIT.height) {
-        const scale = PAGE_FIT.height / height;
-        sheet.style.transformOrigin = 'top center';
-        sheet.style.transform = `scale(${scale})`;
-        fit.style.height = `${Math.floor(height * scale)}px`;
-        fit.style.overflow = 'hidden';
-      }
-    }
+    if (fit && sheet) fitSheetToPage(fit, sheet);
     let finished = false;
     const done = () => {
       if (finished) return;
@@ -425,7 +449,7 @@ export default function FreightDesk({ variant = 'portal', identity = null, onSes
       pageRule.remove();
       document.title = savedTitle;
       document.body.classList.remove('fdPrinting');
-      if (sheet) Object.assign(sheet.style, { width: '', transform: '', transformOrigin: '' });
+      if (sheet) Object.assign(sheet.style, { width: '', padding: '', transform: '', transformOrigin: '' });
       if (fit) Object.assign(fit.style, { height: '', overflow: '' });
       setPrintJob(null);
     };
@@ -663,20 +687,20 @@ function QuoteView({ quote, setQuote, result, onPick, onSave, saving, api, notif
       h('section', { className: 'card' },
         h('div', { className: 'cardTitle' }, h('h3', null, 'Price')),
         h('div', { className: 'formGrid fdGrid3' },
-          h(Field, { label: 'Purchase price per MT', hint: 'What you pay the grower or supplier.' },
+          h(Field, { label: 'Purchase price per MT', hint: 'What you pay the grower or supplier.', screenHint: true },
             h('span', { className: 'fdCombo' }, num('purchasePrice'), currency('purchaseCurrency', 'Purchase currency'))),
           // Left off the PDF when blank, rather than printing a lone hint or currency.
           h(Field, { label: 'USD to CAD rate', hint: quote.usdcadDate ? `Bank of Canada rate for ${formatDate(quote.usdcadDate)}.` : 'CAD for one US dollar.', className: printIfFilled(quote.usdcad) },
             h('span', { className: 'fdCombo' }, num('usdcad', { placeholder: '1.3850' }),
               h('button', { type: 'button', className: 'secondary', onClick: fetchFx, disabled: fxBusy, title: 'Use the latest Bank of Canada daily rate' }, fxBusy ? '…' : 'BoC rate'))),
-          h(Field, { label: 'Final price per MT', hint: 'The price for the customer.', className: printIfFilled(quote.salePrice) },
+          h(Field, { label: 'Final price per MT', hint: 'The price for the customer.', screenHint: true, className: printIfFilled(quote.salePrice) },
             h('span', { className: 'fdCombo' }, num('salePrice', { placeholder: 'Optional' }), currency('saleCurrency', 'Final price currency'))))),
       h('section', { className: 'card dataCard fdChargesCard' },
         h('div', { className: 'cardTitle' }, h('h3', null, 'Freight and charges')),
         result.lines.length
           ? h('div', { className: 'tableWrap' },
             h('table', { className: 'fdStatic' },
-              h('thead', null, h('tr', null, h('th', null, 'Charge'), h('th', null, 'Rate'), h('th', { className: 'fdNum' }, columnHead('Per MT')), h('th', { className: 'fdNum' }, columnHead('Shipment')), h('th', null, h('span', { className: 'fdSr' }, 'Remove')))),
+              h('thead', null, h('tr', null, h('th', null, 'Charge'), h('th', null, 'Rate'), h('th', { className: 'fdNum' }, columnHead('Per MT')), h('th', { className: 'fdNum' }, columnHead('Shipment')), h('th', { className: 'fdNoPrint' }, h('span', { className: 'fdSr' }, 'Remove')))),
               h('tbody', null, result.lines.map((line, i) => h(LineRow, { key: i, line, i, columnCurrency, summaryCurrency, usdcad: result.usdcad, rates, setLine, removeLine, useNewer })))))
           : h(Empty, { label: 'No charges yet. Add rail, loading, port and ocean charges from rate memory.' }),
         h('div', { className: 'fdCardFoot' },
@@ -695,7 +719,7 @@ function LineRow({ line, i, columnCurrency, summaryCurrency, usdcad, rates, setL
       onClick: () => { const rate = rates.find((r) => r.id === f.newerId); if (rate) useNewer(i, rate); },
     }, 'Use newer rate'))));
   const units = line.units ? h('small', null, `${line.units} ${line.unitLabel} for this quantity`) : null;
-  const remove = h('td', { className: 'fdNum' }, h('button', { type: 'button', className: 'iconButton', onClick: () => removeLine(i), 'aria-label': 'Remove this charge' }, h(Trash2, { size: 15 })));
+  const remove = h('td', { className: 'fdNum fdNoPrint' }, h('button', { type: 'button', className: 'iconButton', onClick: () => removeLine(i), 'aria-label': 'Remove this charge' }, h(Trash2, { size: 15 })));
   // A USD charge is shown in USD. Below an amount in the other currency is what
   // it adds to the quote summary, in the summary's currency, so the rows add up.
   const inUSD = line.perTonneUSD !== null && line.perTonneUSD !== undefined;

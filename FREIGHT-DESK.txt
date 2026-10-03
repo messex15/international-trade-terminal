@@ -62,8 +62,10 @@ per-unit prices are in metric tonnes, shown as MT.
   name" on the PDF); they can type another.
 - Saved quotes: the server recomputes totals and keeps a copy of the rates
   used. Opening a saved quote re-checks it against today's rates.
-- Print / PDF: prints as a Costing Sheet on one page. A long quote is
-  scaled down to fit; a short one prints at full size. The top of the page
+- Print / PDF: prints as a Costing Sheet on one page, as large as fits: up
+  to 25% larger than the screen for a typical quote, scaled down for a long
+  one, with the same margins either way. Hints for filling in the form are
+  not printed. The top of the page
   shows "Your company name" from the quote (default International Trade
   Terminal) and the time it was printed. New quotes keep the last name used
   in that browser; saved quotes keep their own. The browser's own header and
